@@ -1,30 +1,31 @@
-# FHIR R4 to R6 Migration Runner
+# DiffyR6 - FHIR Profile Comparison & Analysis CLI
 
-An automated pipeline for migrating FHIR R4 Implementation Guides to FHIR R6, with built-in profile comparison and rule-based analysis.
+An automated toolkit for comparing FHIR profiles across different versions, analyzing structural differences, and generating comprehensive impact reports with rule-based evaluation.
 
 ## Features
 
 - 📦 **Automated Package Download** - Downloads FHIR packages from the official registry
-- 🔄 **FSH Generation** - Converts FHIR resources to FSH using GoFSH
-- ⬆️ **R6 Upgrade** - Automatically upgrades R4 profiles to R6 using SUSHI
-- 📊 **Profile Comparison** - Compares R4 and R6 profiles using the HL7 Validator
-- 📝 **Rule-Based Analysis** - Applies customizable rules to identify migration challenges
-- 🎯 **Migration Scoring** - Calculates a migration complexity score
-- 📄 **Markdown Reports** - Generates detailed migration reports with timestamps
+- 🔄 **FSH Generation** - Converts FHIR resources to FSH using GoFSH  
+- ⬆️ **Profile Upgrade Pipeline** - Automatically upgrades profiles between FHIR versions using SUSHI
+- 📊 **Profile Comparison** - Compares profile versions using the HL7 FHIR Validator
+- 📝 **Rule-Based Difference Analysis** - Applies customizable rules to classify and score structural changes
+- 🎯 **Impact Scoring** - Calculates complexity scores based on breaking changes and migration risks
+- 🚨 **Removed Resource Detection** - Identifies profiles based on resource types removed in newer FHIR versions
+- 📄 **Markdown Reports** - Generates detailed comparison reports with timestamps and findings categorization
 
 ## Installation
 
 ### From GitHub Registry
 
 ```bash
-npm install @gefyra/fhir-r6-migration-runner
+npm install @gefyra/diffyr6-cli
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/Gefyra/fhir-r6-migration-runner.git
-cd fhir-r6-migration-runner
+git clone https://github.com/Gefyra/DiffyR6-Cli.git
+cd DiffyR6-Cli
 npm install
 npm link
 ```
@@ -143,8 +144,8 @@ console.log('Findings:', result.findingsCount);
 |-------|------|-------------|
 | `configVersion` | string | Config schema version (must be "1.0.0") |
 | `packageId` | string | FHIR package ID (required if `enableGoFSH` is true) |
-| `resourcesDir` | string | Directory for R4 resources |
-| `resourcesR6Dir` | string | Directory for R6 resources |
+| `resourcesDir` | string | Directory for baseline/source version resources |
+| `resourcesR6Dir` | string | Directory for target/comparison version resources |
 | `compareDir` | string | Directory for comparison HTML files |
 | `outputDir` | string | Directory for generated reports |
 
@@ -159,27 +160,27 @@ console.log('Findings:', result.findingsCount);
 | `workdir` | string | `null` | Working directory (uses current dir if null) |
 | `compareMode` | string | `"incremental"` | Comparison mode: `"incremental"` or `"full"` |
 
-**Auto-download feature:** When `validatorJarPath` is `null`, the HL7 FHIR Validator will be automatically downloaded from the [latest GitHub release](https://github.com/hapifhir/org.hl7.fhir.core/releases/latest) to `<workdir>/validator_cli.jar`. This download only happens once - subsequent runs will reuse the existing JAR file.
+**Auto-download feature:** When `validatorJarPath` is `null`, the HL7 FHIR Validator will be automatically downloaded from a [stable GitHub release](https://github.com/hapifhir/org.hl7.fhir.core/releases/download/6.7.10/validator_cli.jar) to `<workdir>/validator_cli.jar`. This download only happens once - subsequent runs will reuse the existing JAR file.
 
 ## Pipeline Steps
 
-The migration pipeline consists of 4 steps:
+The comparison pipeline consists of 4 steps:
 
 ### 1. GoFSH (Optional)
 
-Downloads the specified FHIR package and converts it to FSH using GoFSH.
+Downloads the specified FHIR package and converts it to FSH using GoFSH for the baseline version.
 
 **Skipped if:** `resourcesDir/sushi-config.yaml` already exists
 
-### 2. Upgrade to R6
+### 2. Profile Upgrade
 
-Runs SUSHI to upgrade the R4 project to R6, applying automatic fixes for common migration issues.
+Runs SUSHI to upgrade profiles to the target FHIR version, applying automatic fixes for common issues.
 
 **Skipped if:** `resourcesR6Dir/sushi-config.yaml` already exists
 
 ### 3. Profile Comparison
 
-Uses the HL7 FHIR Validator to compare R4 and R6 profiles, generating HTML comparison files.
+Uses the HL7 FHIR Validator to compare baseline and target profile versions, generating HTML comparison files showing structural differences.
 
 **Incremental mode:** Only compares profiles with missing HTML files
 **Full mode:** Compares all profiles, overwriting existing files
@@ -187,9 +188,10 @@ Uses the HL7 FHIR Validator to compare R4 and R6 profiles, generating HTML compa
 ### 4. Report Generation
 
 Applies rules to the comparison HTML files and generates a markdown report with:
+- Removed resource detection (profiles based on deprecated resource types)
 - Detailed findings grouped by profile and category
-- Migration complexity score
-- Timestamped filename (e.g., `migration-report-20260123-143052.md`)
+- Impact score based on breaking changes
+- Timestamped filename (e.g., `comparison-report-20260123-143052.md`)
 
 ## Compare Modes
 
@@ -233,14 +235,14 @@ The package includes a default set of rules for common migration issues. You can
 
 ```json
 {
-  "title": "Custom Migration Rules",
+  "title": "Custom Analysis Rules",
   "tables": [
     {
       "sectionHeading": "Structure",
       "rules": [
         {
-          "name": "Element removed in R6",
-          "description": "An element from R4 no longer exists in R6",
+          "name": "Element removed in target version",
+          "description": "An element from the baseline version no longer exists in the target",
           "rank": 50,
           "value": 2,
           "conditions": [
@@ -250,7 +252,7 @@ The package includes a default set of rules for common migration issues. You can
               "value": "Removed this element"
             }
           ],
-          "template": "The element {{Name}} exists in R4 but was removed in R6."
+          "template": "The element {{Name}} exists in baseline but was removed in target."
         }
       ]
     }
@@ -261,9 +263,9 @@ The package includes a default set of rules for common migration issues. You can
 ### Rule Properties
 
 - **name**: Rule category name (groups findings in the report)
-- **description**: Detailed explanation of the issue
+- **description**: Detailed explanation of the difference
 - **rank**: Sorting order in the report (lower = higher priority)
-- **value**: Score contribution (higher = more complex migration)
+- **value**: Score contribution (higher = more significant change)
 - **conditions**: Array of conditions that must ALL match
 - **template**: Output text with variable substitution (`{{variableName}}`)
 
@@ -279,25 +281,34 @@ The package includes a default set of rules for common migration issues. You can
 - Index-based columns (e.g., `{{col1}}`, `{{col2}}`)
 - Context variables: `{{file}}`, `{{section}}`, `{{profile}}`
 
-## Migration Score
+## Impact Score
 
-The migration score is calculated by summing the `value` field from all rule matches.
+The impact score is calculated by summing the `value` field from all rule matches across all differences found.
 
 **Interpretation:**
-- **0-50**: Low complexity - straightforward migration
-- **51-150**: Medium complexity - moderate effort required
-- **151+**: High complexity - significant migration challenges
+- **0-50**: Low impact - minor differences, straightforward adaptation
+- **51-150**: Medium impact - moderate structural changes requiring attention
+- **151+**: High impact - significant breaking changes and redesign needed
 
 ## Output
 
 ### Report Format
 
 ```markdown
-# FHIR R4 to R6 Migration Report
+# FHIR Profile Comparison Report
 
 **Generated:** 2026-01-23T14:30:52.000Z
 **Total Findings:** 42
-**Migration Score:** 135
+**Impact Score:** 135
+**Resources Removed:** 0
+
+---
+
+## ⚠️ Resources Removed in Target Version
+
+✅ **No profiles found that are based on resource types removed in target version.**
+
+Your baseline profiles do not use any deprecated resource types.
 
 ---
 
@@ -305,24 +316,24 @@ The migration score is calculated by summing the `value` field from all rule mat
 
 **Score:** 25 | **Findings:** 8
 
-### Element with Must-Support removed in R6
+### Element removed in target version
 
-*An element marked as Must-Support in R4 has been removed...*
+*An element from baseline version no longer exists in target...*
 
-- Element identifier exists in R4 MS, but removed in R6. *(Score: 15)*
-- Element photo exists in R4 MS, but removed in R6. *(Score: 15)*
+- Element identifier exists in baseline but removed in target. *(Score: 15)*
+- Element photo exists in baseline but removed in target. *(Score: 15)*
 
 ### Change in cardinality
 
 *The cardinality of an element has changed...*
 
-- For element name, the cardinality changed in R6: cardinalities differ (0..* vs 1..*) *(Score: 5)*
+- For element name, the cardinality changed: cardinalities differ (0..* vs 1..*) *(Score: 5)*
 
 ---
 
-**Final Migration Score:** 135
+**Final Impact Score:** 135
 
-*Lower scores indicate fewer migration challenges.*
+*Lower scores indicate fewer structural changes.*
 ```
 
 ## Configuration Versioning
@@ -376,19 +387,25 @@ Download manually and specify the path:
 ### Project Structure
 
 ```
-fhir-r6-runner-package/
+DiffyR6-Cli/
 ├── src/
-│   ├── index.js          # Main pipeline logic
-│   ├── cli.js            # CLI entry point
-│   ├── config.js         # Configuration loading & validation
-│   ├── rules-engine.js   # Rule evaluation engine
+│   ├── index.js            # Main pipeline logic
+│   ├── cli.js              # CLI entry point
+│   ├── config.js           # Configuration loading & validation
+│   ├── rules-engine.js     # Rule evaluation engine
+│   ├── generate-fsh.js     # GoFSH package download & FSH generation
+│   ├── upgrade-sushi.js    # SUSHI profile upgrade with auto-fixes
+│   ├── compare-profiles.js # HL7 Validator profile comparison
 │   └── utils/
-│       ├── fs.js         # Filesystem utilities
-│       ├── process.js    # Process spawning utilities
-│       ├── sushi-log.js  # SUSHI log parsing
-│       └── html.js       # HTML parsing utilities
+│       ├── fs.js               # Filesystem utilities
+│       ├── process.js          # Process spawning utilities
+│       ├── sushi-log.js        # SUSHI log parsing
+│       ├── html.js             # HTML parsing utilities
+│       ├── validator.js        # Validator JAR auto-download
+│       └── removed-resources.js # Removed resource detection
 ├── config/
-│   └── default-rules.json # Default rule configuration
+│   ├── default-rules.json           # Default analysis rules
+│   └── resources-r4-not-in-r6.json  # List of removed resource types
 ├── package.json
 └── README.md
 ```

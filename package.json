@@ -1,5 +1,5 @@
 {
-  "name": "@gefyra/fhir-r6-migration-runner",
+  "name": "@gefyra/diffyr6-cli",
   "version": "1.0.0",
   "description": "FHIR R4 to R6 migration pipeline runner with automated profile comparison and rule-based analysis",
   "main": "src/index.js",
