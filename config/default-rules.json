@@ -1,0 +1,135 @@
+{
+  "title": "Structure Differences",
+  "output": "migration-report.md",
+  "tables": [
+    {
+      "directory": "compare",
+      "sectionHeading": "Structure",
+      "rules": [
+        {
+          "name": "Element with Must-Support removed in R6",
+          "description": "An element marked as Must-Support in R4 has been removed in R6. This requires special attention during migration, as systems supporting this element need to be adapted.",
+          "rank": 1,
+          "value": 15,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "equals",
+              "value": "Removed this element"
+            },
+            {
+              "column": "L Flags",
+              "operator": "contains",
+              "value": "This element must be supported"
+            }
+          ],
+          "template": "Element {{Name}} exists in R4 MS, but removed in R6."
+        },
+        {
+          "name": "Change in cardinality for Must-Support element",
+          "description": "The cardinality of a Must-Support element has changed. This may mean that required fields become optional or vice versa.",
+          "rank": 30,
+          "value": 5,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "contains",
+              "value": "cardinalities differ"
+            },
+            {
+              "column": "L Flags",
+              "operator": "contains",
+              "value": "This element must be supported"
+            }
+          ],
+          "template": "For element {{Name}}, the cardinality changed in R6 and it had an MS in R4: {{Comments}}"
+        },
+        {
+          "name": "Element removed in R6",
+          "description": "An element from R4 no longer exists in R6. Data in this element may need to be migrated to another element or discarded.",
+          "rank": 50,
+          "value": 2,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "equals",
+              "value": "Removed this element"
+            }
+          ],
+          "template": "The element {{Name}} exists in R4 but was removed in R6."
+        },
+        {
+          "name": "Element added as required in R6",
+          "description": "A new required field has been added in R6. Values for this element must be provided during migration.",
+          "rank": 20,
+          "value": 15,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "equals",
+              "value": "Added this element"
+            },
+            {
+              "column": "L Card",
+              "operator": "contains",
+              "value": "1.."
+            }
+          ],
+          "template": "The element {{Name}} was added as required in R6."
+        },
+        {
+          "name": "Element added in R6",
+          "description": "A new optional element has been added in R6. This is usually unproblematic and offers new possibilities for data modeling.",
+          "rank": 60,
+          "value": 2,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "equals",
+              "value": "Added this element"
+            }
+          ],
+          "template": "The element {{Name}} was added in R6."
+        },
+        {
+          "name": "Change in cardinality",
+          "description": "The cardinality of an element has changed. Check whether this affects your implementation.",
+          "rank": 40,
+          "value": 5,
+          "conditions": [
+            {
+              "column": "Comments",
+              "operator": "contains",
+              "value": "cardinalities differ"
+            }
+          ],
+          "template": "For element {{Name}}, the cardinality changed in R6: {{Comments}}"
+        },
+        {
+          "name": "R5 Preadoption Extensions",
+          "description": "This profile uses R5 Preadoption Extensions that are not fully supported in R4-only contexts. Additional configuration may be needed for compatibility.",
+          "rank": 25,
+          "value": 10,
+          "conditions": [],
+          "template": "This profile uses R5 Preadoption Extensions"
+        },
+        {
+          "name": "Resource Removed in R6",
+          "description": "A resource type that exists in R4 has been completely removed in R6. This requires alternative approaches in migration.",
+          "rank": 35,
+          "value": 12,
+          "conditions": [],
+          "template": "The resource was removed in R6."
+        },
+        {
+          "name": "R4 vs R6 - Comparison Error",
+          "description": "The Java Validator encountered an error when comparing this StructureDefinition. This is typically due new R6 types (like CodeableReference) not being supported during validation.",
+          "rank": 5,
+          "value": 15,
+          "conditions": [],
+          "template": "The StructureDefinition {{name}} had an error while comparing: {{message}}"
+        }
+      ]
+    }
+  ]
+}

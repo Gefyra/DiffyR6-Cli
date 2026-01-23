@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Output directories
+output/
+Resources/
+ResourcesR6/
+compare/
+workdir/
+
+# Logs
+*.log
+sushi*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Test
+coverage/
+
+# Temp
+tmp/
+temp/
+*.tmp

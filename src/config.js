@@ -1,0 +1,147 @@
+import fsp from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { pathExists } from './utils/fs.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const CONFIG_VERSION = '1.0.0';
+
+/**
+ * Default configuration values
+ */
+export const DEFAULT_CONFIG = {
+  configVersion: CONFIG_VERSION,
+  packageId: null,
+  packageVersion: 'current',
+  enableGoFSH: true,
+  resourcesDir: 'Resources',
+  resourcesR6Dir: 'ResourcesR6',
+  compareDir: 'compare',
+  outputDir: 'output',
+  rulesConfigPath: null,
+  validatorJarPath: null,
+  workdir: null,
+  compareMode: 'incremental',
+};
+
+/**
+ * Loads and validates a configuration file
+ */
+export async function loadConfig(configPath) {
+  const raw = await fsp.readFile(configPath, 'utf8');
+  const config = JSON.parse(raw);
+  
+  // Validate config version
+  validateConfigVersion(config);
+  
+  // Merge with defaults
+  const merged = { ...DEFAULT_CONFIG, ...config };
+  
+  // Validate required fields
+  validateConfig(merged);
+  
+  return merged;
+}
+
+/**
+ * Validates the configuration version
+ */
+function validateConfigVersion(config) {
+  if (!config.configVersion) {
+    throw new Error(
+      `Missing 'configVersion' field in config. Expected version: ${CONFIG_VERSION}`
+    );
+  }
+  
+  const [major, minor] = config.configVersion.split('.').map(Number);
+  const [expectedMajor] = CONFIG_VERSION.split('.').map(Number);
+  
+  if (major !== expectedMajor) {
+    throw new Error(
+      `Incompatible config version: ${config.configVersion}. Expected major version: ${expectedMajor}`
+    );
+  }
+}
+
+/**
+ * Validates the configuration object
+ */
+function validateConfig(config) {
+  const errors = [];
+  
+  if (!config.packageId && config.enableGoFSH) {
+    errors.push('packageId is required when enableGoFSH is true');
+  }
+  
+  if (!config.resourcesDir) {
+    errors.push('resourcesDir is required');
+  }
+  
+  if (!config.resourcesR6Dir) {
+    errors.push('resourcesR6Dir is required');
+  }
+  
+  if (!config.compareDir) {
+    errors.push('compareDir is required');
+  }
+  
+  if (!config.outputDir) {
+    errors.push('outputDir is required');
+  }
+  
+  if (config.compareMode && !['incremental', 'full'].includes(config.compareMode)) {
+    errors.push('compareMode must be either "incremental" or "full"');
+  }
+  
+  if (errors.length > 0) {
+    throw new Error(`Invalid configuration:\n${errors.map(e => `  - ${e}`).join('\n')}`);
+  }
+}
+
+/**
+ * Creates an example configuration file
+ */
+export async function createExampleConfig(outputPath) {
+  const example = {
+    configVersion: CONFIG_VERSION,
+    packageId: 'de.basisprofil.r4#1.5.0',
+    packageVersion: '1.5.0',
+    enableGoFSH: true,
+    resourcesDir: 'Resources',
+    resourcesR6Dir: 'ResourcesR6',
+    compareDir: 'compare',
+    outputDir: 'output',
+    rulesConfigPath: null,
+    validatorJarPath: null,
+    workdir: null,
+    compareMode: 'incremental'
+  };
+  
+  await fsp.writeFile(
+    outputPath,
+    JSON.stringify(example, null, 2),
+    'utf8'
+  );
+}
+
+/**
+ * Loads the default rules configuration
+ */
+export async function loadDefaultRules() {
+  const rulesPath = path.join(__dirname, '..', 'config', 'default-rules.json');
+  const raw = await fsp.readFile(rulesPath, 'utf8');
+  return JSON.parse(raw);
+}
+
+/**
+ * Loads rules from a custom path or falls back to default
+ */
+export async function loadRules(customPath) {
+  if (customPath && await pathExists(customPath)) {
+    const raw = await fsp.readFile(customPath, 'utf8');
+    return JSON.parse(raw);
+  }
+  return loadDefaultRules();
+}

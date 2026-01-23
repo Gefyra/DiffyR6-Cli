@@ -1,0 +1,54 @@
+{
+  "name": "@gefyra/fhir-r6-migration-runner",
+  "version": "1.0.0",
+  "description": "FHIR R4 to R6 migration pipeline runner with automated profile comparison and rule-based analysis",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "fhir-r6-migrate": "src/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./config": "./src/config.js",
+    "./rules-engine": "./src/rules-engine.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Tests will be added later\" && exit 0"
+  },
+  "keywords": [
+    "fhir",
+    "r4",
+    "r6",
+    "migration",
+    "profile",
+    "comparison",
+    "gofsh",
+    "sushi",
+    "healthcare",
+    "hl7"
+  ],
+  "author": "Jonas Schön <js@gefyra.de>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gefyra/fhir-r6-migration-runner.git"
+  },
+  "publishConfig": {
+    "@gefyra:registry": "https://npm.pkg.github.com"
+  },
+  "peerDependencies": {
+    "fsh-sushi": "^3.0.0",
+    "gofsh": "^2.5.0"
+  },
+  "peerDependenciesMeta": {
+    "fsh-sushi": {
+      "optional": true
+    },
+    "gofsh": {
+      "optional": true
+    }
+  }
+}
