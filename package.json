@@ -37,7 +37,7 @@
     "url": "https://github.com/Gefyra/fhir-r6-migration-runner.git"
   },
   "publishConfig": {
-    "@gefyra:registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
     "fsh-sushi": "^3.0.0",
