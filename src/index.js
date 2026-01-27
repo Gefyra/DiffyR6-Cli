@@ -8,6 +8,7 @@ import { generateFshFromPackage } from './generate-fsh.js';
 import { upgradeSushiToR6 } from './upgrade-sushi.js';
 import { compareProfiles } from './compare-profiles.js';
 import { findRemovedResources } from './utils/removed-resources.js';
+import { createZip } from './utils/zip.js';
 
 /**
  * Main entry point - runs the FHIR R4 to R6 migration pipeline
@@ -67,16 +68,27 @@ export async function runMigration(config) {
   const removedResources = await findRemovedResources(resourcesDir);
   const report = await generateReport(context, compareResults, removedResources);
   context.steps.push('report');
+
+  let exportZipPath = null;
+  if (config.exportZip) {
+    console.log('\nGenerating export ZIP...');
+    exportZipPath = await exportComparisonZip(context, report);
+    context.steps.push('exportZip');
+  }
   
   console.log(`\n✓ Migration complete!`);
   console.log(`  Report: ${report.path}`);
   console.log(`  Total Score: ${report.score}`);
   console.log(`  Findings: ${report.findingsCount}`);
+  if (exportZipPath) {
+    console.log(`  Export ZIP: ${exportZipPath}`);
+  }
   
   return {
     success: true,
     steps: context.steps,
     report: report.path,
+    exportZip: exportZipPath,
     score: report.score,
     findingsCount: report.findingsCount,
   };
@@ -233,9 +245,62 @@ async function generateReport(context, compareResults, removedResources = []) {
   
   return {
     path: reportPath,
+    filename: reportFilename,
+    timestamp,
     score: totalScore,
     findingsCount: findings.length,
   };
+}
+
+/**
+ * Create a ZIP export with compare HTML files, report, and run config
+ */
+async function exportComparisonZip(context, report) {
+  const { compareDir, outputDir, config } = context;
+  const exportFilename = 'diffyr6-publish.zip';
+  const exportPath = path.join(outputDir, exportFilename);
+
+  const entries = [];
+
+  // Add HTML comparison files sent to the API
+  const htmlFiles = await listExportHtmlFiles(compareDir);
+  for (const file of htmlFiles) {
+    const filePath = path.join(compareDir, file);
+    const content = await fsp.readFile(filePath);
+    entries.push({
+      name: file,
+      data: content,
+      mtime: (await fsp.stat(filePath)).mtime,
+    });
+  }
+
+  // Add markdown report
+  const reportContent = await fsp.readFile(report.path);
+  entries.push({
+    name: report.filename,
+    data: reportContent,
+    mtime: (await fsp.stat(report.path)).mtime,
+  });
+
+  // Add config used for the run
+  entries.push({
+    name: 'run-config.json',
+    data: JSON.stringify(config, null, 2),
+    mtime: new Date(),
+  });
+
+  await createZip(exportPath, entries);
+  return exportPath;
+}
+
+async function listExportHtmlFiles(compareDir) {
+  const exists = await directoryExists(compareDir);
+  if (!exists) {
+    return [];
+  }
+  const files = await fsp.readdir(compareDir);
+  const allowed = /^(sd|xx)-.+-.+\.html$/i;
+  return files.filter(file => allowed.test(file)).sort();
 }
 
 /**

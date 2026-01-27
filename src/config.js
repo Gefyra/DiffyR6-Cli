@@ -6,7 +6,7 @@ import { pathExists } from './utils/fs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const CONFIG_VERSION = '1.0.0';
+export const CONFIG_VERSION = '1.0.1';
 
 /**
  * Default configuration values
@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG = {
   validatorJarPath: null,
   workdir: null,
   compareMode: 'incremental',
+  exportZip: true,
 };
 
 /**
@@ -94,6 +95,10 @@ function validateConfig(config) {
   if (config.compareMode && !['incremental', 'full'].includes(config.compareMode)) {
     errors.push('compareMode must be either "incremental" or "full"');
   }
+
+  if (typeof config.exportZip !== 'boolean') {
+    errors.push('exportZip must be a boolean');
+  }
   
   if (errors.length > 0) {
     throw new Error(`Invalid configuration:\n${errors.map(e => `  - ${e}`).join('\n')}`);
@@ -106,7 +111,7 @@ function validateConfig(config) {
 export async function createExampleConfig(outputPath) {
   const example = {
     configVersion: CONFIG_VERSION,
-    packageId: 'de.basisprofil.r4#1.5.0',
+    packageId: 'de.basisprofil.r4',
     packageVersion: '1.5.0',
     enableGoFSH: true,
     resourcesDir: 'Resources',
@@ -116,7 +121,8 @@ export async function createExampleConfig(outputPath) {
     rulesConfigPath: null,
     validatorJarPath: null,
     workdir: null,
-    compareMode: 'incremental'
+    compareMode: 'incremental',
+    exportZip: true
   };
   
   await fsp.writeFile(

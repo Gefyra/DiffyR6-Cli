@@ -68,7 +68,8 @@ This creates a `migration-config.json` file with default settings.
   "rulesConfigPath": null,
   "validatorJarPath": null,
   "workdir": null,
-  "compareMode": "incremental"
+  "compareMode": "incremental",
+  "exportZip": true
 }
 ```
 
@@ -159,6 +160,7 @@ console.log('Findings:', result.findingsCount);
 | `validatorJarPath` | string | `null` | Path to validator_cli.jar (auto-downloads latest from GitHub if null) |
 | `workdir` | string | `null` | Working directory (uses current dir if null) |
 | `compareMode` | string | `"incremental"` | Comparison mode: `"incremental"` or `"full"` |
+| `exportZip` | boolean | `true` | Create a ZIP export containing compare HTML, markdown report, and run config |
 
 **Auto-download feature:** When `validatorJarPath` is `null`, the HL7 FHIR Validator will be automatically downloaded from a [stable GitHub release](https://github.com/hapifhir/org.hl7.fhir.core/releases/download/6.7.10/validator_cli.jar) to `<workdir>/validator_cli.jar`. This download only happens once - subsequent runs will reuse the existing JAR file.
 

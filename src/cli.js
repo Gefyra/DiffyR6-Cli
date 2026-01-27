@@ -4,9 +4,11 @@ import { runMigration } from './index.js';
 import { loadConfig, createExampleConfig } from './config.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 async function main() {
   const args = process.argv.slice(2);
@@ -19,8 +21,8 @@ async function main() {
   
   // Handle --version
   if (args.includes('--version') || args.includes('-v')) {
-    const pkg = await import('../package.json', { assert: { type: 'json' } });
-    console.log(pkg.default.version);
+    const pkg = require('../package.json');
+    console.log(pkg.version);
     return;
   }
   
