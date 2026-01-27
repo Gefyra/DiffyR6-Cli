@@ -1,0 +1,32 @@
+# Development files
+.git
+.github
+.vscode
+.idea
+
+# Tests and examples
+test/
+tests/
+examples/
+*.test.js
+*.spec.js
+
+# Documentation source
+docs/
+*.md
+!README.md
+
+# Build artifacts
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Temporary
+tmp/
+temp/
+workdir/
