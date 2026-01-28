@@ -300,7 +300,10 @@ async function listExportHtmlFiles(compareDir) {
   }
   const files = await fsp.readdir(compareDir);
   const allowed = /^(sd|xx)-.+-.+\.html$/i;
-  return files.filter(file => allowed.test(file)).sort();
+  const excluded = /(intersection|union)\.html$/i;
+  return files
+    .filter(file => allowed.test(file) && !excluded.test(file))
+    .sort();
 }
 
 /**
