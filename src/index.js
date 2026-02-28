@@ -7,6 +7,7 @@ import { spawnProcess } from './utils/process.js';
 import { generateFshFromPackage } from './generate-fsh.js';
 import { upgradeSushiToR6 } from './upgrade-sushi.js';
 import { compareProfiles } from './compare-profiles.js';
+import { compareTerminology } from './compare-terminology.js';
 import { findRemovedResources } from './utils/removed-resources.js';
 import { createZip } from './utils/zip.js';
 
@@ -38,41 +39,53 @@ export async function runMigration(config) {
   if (config.enableGoFSH) {
     const shouldRunGoFSH = await checkShouldRunGoFSH(resourcesDir);
     if (shouldRunGoFSH) {
-      console.log('\n[1/4] Downloading package and generating FSH...');
+      console.log('\n[1/5] Downloading package and generating FSH...');
       await runGoFSH(context);
       context.steps.push('gofsh');
     } else {
-      console.log('\n[1/4] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)');
+      console.log('\n[1/5] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)');
     }
   } else {
-    console.log('\n[1/4] GoFSH - DISABLED in config');
+    console.log('\n[1/5] GoFSH - DISABLED in config');
   }
   
   // Step 2: Upgrade to R6
   const shouldRunUpgrade = await checkShouldRunUpgrade(resourcesR6Dir);
   if (shouldRunUpgrade) {
-    console.log('\n[2/4] Upgrading to R6...');
+    console.log('\n[2/5] Upgrading to R6...');
     await runUpgradeToR6(context);
     context.steps.push('upgrade');
   } else {
-    console.log('\n[2/4] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)');
+    console.log('\n[2/5] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)');
   }
   
   // Step 3: Compare profiles
-  console.log('\n[3/4] Comparing R4 vs R6 profiles...');
+  console.log('\n[3/5] Comparing R4 vs R6 profiles...');
   const compareResults = await runProfileComparison(context);
   context.steps.push('compare');
   
-  // Step 4: Generate report with rules
-  console.log('\n[4/4] Generating migration report...');
+  // Step 4: Generat5] Generating migration report...');
   const removedResources = await findRemovedResources(resourcesDir);
   const report = await generateReport(context, compareResults, removedResources);
   context.steps.push('report');
 
+  // Step 5: Compare terminology bindings
+  console.log('\n[5/5] Comparing terminology bindings...');
+  let terminologyReport = null;
+  try {
+    terminologyReport = await runTerminologyComparison(context);
+    if (terminologyReport) {
+      context.steps.push('terminology');
+    }
+  } catch (error) {
+    console.warn(`  Terminology comparison failed: ${error.message}`);
+    console.warn('  Continuing without terminology report...');
+  }
+
   let exportZipPath = null;
   if (config.exportZip) {
     console.log('\nGenerating export ZIP...');
-    exportZipPath = await exportComparisonZip(context, report);
+    exportZipPath = await exportComparisonZip(context, report, terminologyReport);
     context.steps.push('exportZip');
   }
   
@@ -151,6 +164,28 @@ async function runProfileComparison(context) {
   console.log(`  Compared ${result.comparedCount} profile pair(s)`);
   
   return [];
+}
+
+/**
+ * Run terminology comparison
+ */
+async function runTerminologyComparison(context) {
+  const { resourcesDir, resourcesR6Dir, outputDir, config } = context;
+  
+  const options = {
+    debug: config.debug || false,
+  };
+  
+  const result = await compareTerminology(resourcesDir, resourcesR6Dir, outputDir, options);
+  
+  if (result) {
+    console.log(`  ${result.profilesWithDifferences} profile(s) with binding differences`);
+    console.log(`  Total findings: ${result.totalFindings}`);
+    console.log(`  Markdown report: ${result.path}`);
+    console.log(`  JSON report: ${result.jsonPath}`);
+  }
+  
+  return result;
 }
 
 /**
@@ -255,7 +290,7 @@ async function generateReport(context, compareResults, removedResources = []) {
 /**
  * Create a ZIP export with compare HTML files, report, and run config
  */
-async function exportComparisonZip(context, report) {
+async function exportComparisonZip(context, report, terminologyReport = null) {
   const { compareDir, outputDir, config } = context;
   const exportFilename = 'diffyr6-publish.zip';
   const exportPath = path.join(outputDir, exportFilename);
@@ -281,6 +316,26 @@ async function exportComparisonZip(context, report) {
     data: reportContent,
     mtime: (await fsp.stat(report.path)).mtime,
   });
+
+  // Add terminology report if available
+  if (terminologyReport && terminologyReport.path) {
+    const termContent = await fsp.readFile(terminologyReport.path);
+    entries.push({
+      name: terminologyReport.filename,
+      data: termContent,
+      mtime: (await fsp.stat(terminologyReport.path)).mtime,
+    });
+    
+    // Add terminology JSON if available
+    if (terminologyReport.jsonPath) {
+      const termJsonContent = await fsp.readFile(terminologyReport.jsonPath);
+      entries.push({
+        name: terminologyReport.jsonFilename,
+        data: termJsonContent,
+        mtime: (await fsp.stat(terminologyReport.jsonPath)).mtime,
+      });
+    }
+  }
 
   // Add config used for the run
   entries.push({

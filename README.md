@@ -8,6 +8,7 @@ An automated toolkit for comparing FHIR profiles across different versions, anal
 - 🔄 **FSH Generation** - Converts FHIR resources to FSH using GoFSH  
 - ⬆️ **Profile Upgrade Pipeline** - Automatically upgrades profiles between FHIR versions using SUSHI
 - 📊 **Profile Comparison** - Compares profile versions using the HL7 FHIR Validator
+- 🎯 **Terminology Binding Analysis** - Compares terminology bindings between versions and checks ValueSet content from local package cache
 - 📝 **Rule-Based Difference Analysis** - Applies customizable rules to classify and score structural changes
 - 🎯 **Impact Scoring** - Calculates complexity scores based on breaking changes and migration risks
 - 🚨 **Removed Resource Detection** - Identifies profiles based on resource types removed in newer FHIR versions
@@ -166,7 +167,7 @@ console.log('Findings:', result.findingsCount);
 
 ## Pipeline Steps
 
-The comparison pipeline consists of 4 steps:
+The comparison pipeline consists of 5 steps:
 
 ### 1. GoFSH (Optional)
 
@@ -194,6 +195,19 @@ Applies rules to the comparison HTML files and generates a markdown report with:
 - Detailed findings grouped by profile and category
 - Impact score based on breaking changes
 - Timestamped filename (e.g., `comparison-report-20260123-143052.md`)
+
+### 5. Terminology Binding Analysis
+
+Compares terminology bindings between R4 and R6 profiles:
+1. Runs `sushi -s` in both Resources and ResourcesR6 directories to generate snapshots
+2. Compares `element[].binding.strength` and `valueSet` between R4 and R6 profiles
+3. For ValueSets with version notation (pipe `|`), loads and compares content from local FHIR package cache:
+   - R4: `%USERPROFILE%\.fhir\packages\hl7.fhir.r4.core#4.0.1\package`
+   - R6: `%USERPROFILE%\.fhir\packages\hl7.fhir.r6.core#6.0.0-ballot3\package`
+4. Generates a `terminology-report-<timestamp>.md` with all binding differences
+5. Includes the report in the ZIP export
+
+**Note:** This step continues even if it fails, to ensure the main migration completes.
 
 ## Compare Modes
 
