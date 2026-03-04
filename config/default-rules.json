@@ -46,10 +46,15 @@
         },
         {
           "name": "Element type changed in R6",
-          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration.",
+          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration. Note that changes from 'string' to 'id' are not included in this rule.",
           "rank": 15,
           "value": 10,
           "conditions": [
+            {
+              "column": "R Type",
+              "operator": "!equals",
+              "value": "id"
+            },
             {
               "column": "L Type",
               "operator": "!equals",
