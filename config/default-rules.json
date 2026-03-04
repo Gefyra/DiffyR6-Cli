@@ -53,6 +53,16 @@
             {
               "column": "L Type",
               "operator": "!equals",
+              "value": ""
+            },
+            {
+              "column": "R Type",
+              "operator": "!equals",
+              "value": ""
+            },
+            {
+              "column": "L Type",
+              "operator": "!equals",
               "valueColumn": "R Type"
             }
           ],
