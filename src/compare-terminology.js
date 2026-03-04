@@ -8,11 +8,12 @@ import { directoryExists, fileExists } from './utils/fs.js';
  * Compares terminology bindings between R4 and R6 profiles
  * 
  * Steps:
- * 1. Run sushi -s in Resources and ResourcesR6 directories to generate snapshots
- * 2. Find all profile pairs from the comparison run
- * 3. Compare element[].binding.strength and valueSet between R4 and R6
- * 4. If valueSet has a version (pipe notation), compare the actual ValueSet content from local package cache
- * 5. Generate a markdown report with all findings
+ * 1. Find all profile pairs from the comparison run
+ * 2. Compare element[].binding.strength and valueSet between R4 and R6
+ * 3. If valueSet has a version (pipe notation), compare the actual ValueSet content from local package cache
+ * 4. Generate a markdown report with all findings
+ * 
+ * Note: Snapshots must already exist (built by runSnapshotBuild in index.js before calling this function)
  * 
  * @param {string} resourcesDir - R4 resources directory
  * @param {string} resourcesR6Dir - R6 resources directory
@@ -23,38 +24,9 @@ import { directoryExists, fileExists } from './utils/fs.js';
 export async function compareTerminology(resourcesDir, resourcesR6Dir, outputDir, options = {}) {
   const { debug = false } = options;
   
-  console.log('  Checking for existing snapshots...');
-  
-  // Step 1: Check if snapshots already exist, if not run sushi -s
-  const resourcesDirHasSnapshots = await hasSnapshots(resourcesDir);
-  const resourcesR6DirHasSnapshots = await hasSnapshots(resourcesR6Dir);
-  
-  if (resourcesDirHasSnapshots && resourcesR6DirHasSnapshots) {
-    console.log('  Snapshots already exist in both directories, skipping SUSHI build');
-  } else {
-    console.log('  Building snapshots with SUSHI...');
-    
-    try {
-      if (!resourcesDirHasSnapshots) {
-        await runSushiWithSnapshots(resourcesDir, debug);
-      } else {
-        console.log(`  Skipping ${path.basename(resourcesDir)} (snapshots already exist)`);
-      }
-      
-      if (!resourcesR6DirHasSnapshots) {
-        await runSushiWithSnapshots(resourcesR6Dir, debug);
-      } else {
-        console.log(`  Skipping ${path.basename(resourcesR6Dir)} (snapshots already exist)`);
-      }
-    } catch (error) {
-      throw new Error(`Failed to build snapshots: ${error.message}`);
-    }
-    
-    console.log('  Snapshots built successfully');
-  }
   console.log('  Analyzing binding differences...');
   
-  // Step 2-3: Collect profile pairs and compare bindings
+  // Collect profile pairs and compare bindings
   const r4Profiles = await collectStructureDefinitions(resourcesDir);
   const r6Profiles = await collectStructureDefinitions(resourcesR6Dir);
   
@@ -81,13 +53,13 @@ export async function compareTerminology(resourcesDir, resourcesR6Dir, outputDir
   
   console.log(`  Found ${findings.length} profile(s) with binding differences`);
   
-  // Step 4: Identify common bindings across all profiles
+  // Identify common bindings across all profiles
   const commonBindings = identifyCommonBindings(findings);
   
   // Remove common bindings from individual profiles
   const filteredFindings = removeCommonBindingsFromProfiles(findings, commonBindings);
   
-  // Step 5: Generate reports
+  // Generate reports
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const reportFilename = `terminology-report-${timestamp}.md`;
   const reportPath = path.join(outputDir, reportFilename);
@@ -123,7 +95,7 @@ export async function compareTerminology(resourcesDir, resourcesR6Dir, outputDir
 /**
  * Check if snapshots already exist in the StructureDefinition files
  */
-async function hasSnapshots(dir) {
+export async function hasSnapshots(dir) {
   const resourcesPath = path.join(dir, 'fsh-generated', 'resources');
   const exists = await directoryExists(resourcesPath);
   
@@ -160,7 +132,7 @@ async function hasSnapshots(dir) {
 /**
  * Run sushi with snapshots flag in a directory
  */
-async function runSushiWithSnapshots(dir, debug = false) {
+export async function runSushiWithSnapshots(dir, debug = false) {
   const sushiConfigPath = path.join(dir, 'sushi-config.yaml');
   const exists = await fileExists(sushiConfigPath);
   

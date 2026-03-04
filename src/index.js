@@ -7,7 +7,7 @@ import { spawnProcess } from './utils/process.js';
 import { generateFshFromPackage } from './generate-fsh.js';
 import { upgradeSushiToR6 } from './upgrade-sushi.js';
 import { compareProfiles } from './compare-profiles.js';
-import { compareTerminology } from './compare-terminology.js';
+import { compareTerminology, hasSnapshots, runSushiWithSnapshots } from './compare-terminology.js';
 import { findRemovedResources } from './utils/removed-resources.js';
 import { createZip } from './utils/zip.js';
 import { checkForUpdates } from './utils/update-check.js';
@@ -43,42 +43,47 @@ export async function runMigration(config) {
   if (config.enableGoFSH) {
     const shouldRunGoFSH = await checkShouldRunGoFSH(resourcesDir);
     if (shouldRunGoFSH) {
-      console.log('\n[1/5] Downloading package and generating FSH...');
+      console.log('\n[1/6] Downloading package and generating FSH...');
       await runGoFSH(context);
       context.steps.push('gofsh');
     } else {
-      console.log('\n[1/5] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)');
+      console.log('\n[1/6] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)');
     }
   } else {
-    console.log('\n[1/5] GoFSH - DISABLED in config');
+    console.log('\n[1/6] GoFSH - DISABLED in config');
   }
   
   // Step 2: Upgrade to R6
   const shouldRunUpgrade = await checkShouldRunUpgrade(resourcesR6Dir);
   if (shouldRunUpgrade) {
-    console.log('\n[2/5] Upgrading to R6...');
+    console.log('\n[2/6] Upgrading to R6...');
     await runUpgradeToR6(context);
     context.steps.push('upgrade');
   } else {
-    console.log('\n[2/5] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)');
+    console.log('\n[2/6] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)');
   }
   
-  // Step 3: Compare profiles
-  console.log('\n[3/5] Comparing R4 vs R6 profiles...');
+  // Step 3: Build snapshots for both R4 and R6
+  console.log('\n[3/6] Building snapshots with SUSHI...');
+  await runSnapshotBuild(context);
+  context.steps.push('snapshots');
+  
+  // Step 4: Compare profiles
+  console.log('\n[4/6] Comparing R4 vs R6 profiles...');
   const compareResults = await runProfileComparison(context);
   context.steps.push('compare');
   
-  // Step 4: Generat5] Generating migration report...');
+  // Step 5: Generat6] Generating migration report...');
   const removedResources = await findRemovedResources(resourcesDir);
   const report = await generateReport(context, compareResults, removedResources);
   context.steps.push('report');
 
-  // Step 5: Compare terminology bindings
+  // Step 6: Compare terminology bindings
   let terminologyReport = null;
   if (config.skipTerminologyReport) {
-    console.log('\n[5/5] Terminology comparison - SKIPPED (skipTerminologyReport is enabled)');
+    console.log('\n[6/6] Terminology comparison - SKIPPED (skipTerminologyReport is enabled)');
   } else {
-    console.log('\n[5/5] Comparing terminology bindings...');
+    console.log('\n[6/6] Comparing terminology bindings...');
     try {
       terminologyReport = await runTerminologyComparison(context);
       if (terminologyReport) {
@@ -150,6 +155,44 @@ async function runUpgradeToR6(context) {
   const { resourcesDir, config } = context;
   const sushiExecutable = config.sushiExecutable || 'sushi -s';
   await upgradeSushiToR6(resourcesDir, sushiExecutable);
+}
+
+/**
+ * Build snapshots for both R4 and R6 projects with sushi -s
+ */
+async function runSnapshotBuild(context) {
+  const { resourcesDir, resourcesR6Dir, config } = context;
+  const debug = config.debug || false;
+  
+  console.log('  Checking for existing snapshots...');
+  
+  const resourcesDirHasSnapshots = await hasSnapshots(resourcesDir);
+  const resourcesR6DirHasSnapshots = await hasSnapshots(resourcesR6Dir);
+  
+  if (resourcesDirHasSnapshots && resourcesR6DirHasSnapshots) {
+    console.log('  Snapshots already exist in both directories, skipping SUSHI build');
+    return;
+  }
+  
+  console.log('  Building snapshots with SUSHI...');
+  
+  try {
+    if (!resourcesDirHasSnapshots) {
+      await runSushiWithSnapshots(resourcesDir, debug);
+    } else {
+      console.log(`  Skipping ${path.basename(resourcesDir)} (snapshots already exist)`);
+    }
+    
+    if (!resourcesR6DirHasSnapshots) {
+      await runSushiWithSnapshots(resourcesR6Dir, debug);
+    } else {
+      console.log(`  Skipping ${path.basename(resourcesR6Dir)} (snapshots already exist)`);
+    }
+    
+    console.log('  Snapshots built successfully');
+  } catch (error) {
+    throw new Error(`Failed to build snapshots: ${error.message}`);
+  }
 }
 
 /**

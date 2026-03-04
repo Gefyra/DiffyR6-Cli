@@ -7,7 +7,7 @@ import { parseSushiLog } from './utils/sushi-log.js';
 
 const SOURCE_VERSION = '4.0.1';
 const TARGET_VERSION = '6.0.0-ballot3';
-const MAX_ITERATIONS = 25;
+const MAX_ITERATIONS = 10;
 const SNOMED_CT_ERROR_TEXT = 'Resolved value "SNOMED_CT" is not a valid URI';
 
 /**
@@ -248,7 +248,11 @@ async function runSushiUntilSuccess(targetDir, sushiExecutable) {
     }
     console.log(`  Commented out lines in ${modifications} file(s)`);
   }
-  throw new Error(`SUSHI failed after ${MAX_ITERATIONS} attempts`);
+  throw new Error(
+    `SUSHI failed after ${MAX_ITERATIONS} iterations. ` +
+    `Please fix the remaining SUSHI errors manually in the ResourcesR6 directory ` +
+    `and then run 'sushi -s' to build the snapshots.`
+  );
 }
 
 async function runSushi(executable, targetDir) {
@@ -370,6 +374,69 @@ function expandContainsBlockLines(lines, lineNumbers) {
     }
 
     const currentLine = lines[idx].trim();
+    
+    // Handle multi-line string literals (e.g., ^comment, ^description, etc.)
+    // Check if line contains = followed by a quote that's not closed
+    const hasStringAssignment = currentLine.match(/=\s*(""")?(")?/);
+    if (hasStringAssignment) {
+      const tripleQuote = hasStringAssignment[1]; // """
+      const singleQuote = hasStringAssignment[2]; // "
+      
+      if (tripleQuote) {
+        // Triple-quoted string - find closing """
+        const firstTriplePos = currentLine.indexOf('"""');
+        const secondTriplePos = currentLine.indexOf('"""', firstTriplePos + 3);
+        
+        if (secondTriplePos === -1) {
+          // No closing """ on this line - include following lines
+          let nextIdx = idx + 1;
+          while (nextIdx < lines.length) {
+            expanded.add(nextIdx + 1);
+            if (lines[nextIdx].includes('"""')) {
+              break;
+            }
+            nextIdx++;
+            // Safety limit to prevent infinite loops
+            if (nextIdx - idx > 100) break;
+          }
+        }
+      } else if (singleQuote) {
+        // Single-quoted string - check if it's closed on the same line
+        const firstQuotePos = currentLine.indexOf('"');
+        let secondQuotePos = -1;
+        
+        // Find closing quote that's not escaped
+        for (let i = firstQuotePos + 1; i < currentLine.length; i++) {
+          if (currentLine[i] === '"' && currentLine[i - 1] !== '\\') {
+            secondQuotePos = i;
+            break;
+          }
+        }
+        
+        if (secondQuotePos === -1) {
+          // No closing " on this line - include following lines
+          let nextIdx = idx + 1;
+          while (nextIdx < lines.length) {
+            expanded.add(nextIdx + 1);
+            // Check for unescaped closing quote
+            const nextLine = lines[nextIdx];
+            let foundClosing = false;
+            for (let i = 0; i < nextLine.length; i++) {
+              if (nextLine[i] === '"' && (i === 0 || nextLine[i - 1] !== '\\')) {
+                foundClosing = true;
+                break;
+              }
+            }
+            if (foundClosing) {
+              break;
+            }
+            nextIdx++;
+            // Safety limit to prevent infinite loops
+            if (nextIdx - idx > 100) break;
+          }
+        }
+      }
+    }
     
     if (currentLine.includes(' contains') || currentLine.endsWith(' and')) {
       let nextIdx = idx + 1;
