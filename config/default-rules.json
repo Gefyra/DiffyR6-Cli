@@ -45,6 +45,20 @@
           "template": "For element {{Name}}, the cardinality changed in R6 and it had an MS in R4: {{Comments}}"
         },
         {
+          "name": "Element type changed in R6",
+          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration.",
+          "rank": 15,
+          "value": 10,
+          "conditions": [
+            {
+              "column": "L Type",
+              "operator": "!equals",
+              "valueColumn": "R Type"
+            }
+          ],
+          "template": "The element type switched in R6 at element {{Name}}"
+        },
+        {
           "name": "Element removed in R6",
           "description": "An element from R4 no longer exists in R6. Data in this element may need to be migrated to another element or discarded.",
           "rank": 50,
