@@ -6,7 +6,7 @@ import { pathExists } from './utils/fs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const CONFIG_VERSION = '1.0.1';
+export const CONFIG_VERSION = '1.0.2';
 
 /**
  * Default configuration values
@@ -25,6 +25,7 @@ export const DEFAULT_CONFIG = {
   workdir: null,
   compareMode: 'incremental',
   exportZip: true,
+  skipTerminologyReport: false,
 };
 
 /**
@@ -32,7 +33,17 @@ export const DEFAULT_CONFIG = {
  */
 export async function loadConfig(configPath) {
   const raw = await fsp.readFile(configPath, 'utf8');
-  const config = JSON.parse(raw);
+  let config = JSON.parse(raw);
+  const originalVersion = config.configVersion;
+  
+  // Migrate config if needed
+  config = migrateConfig(config);
+  
+  // Write back to file if migration occurred
+  if (config.configVersion !== originalVersion) {
+    await fsp.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+    console.log(`  Config file updated to version ${config.configVersion}`);
+  }
   
   // Validate config version
   validateConfigVersion(config);
@@ -44,6 +55,34 @@ export async function loadConfig(configPath) {
   validateConfig(merged);
   
   return merged;
+}
+
+/**
+ * Migrates configuration from older versions to the current version
+ */
+function migrateConfig(config) {
+  if (!config.configVersion) {
+    // Very old config without version - add all new fields
+    console.log('  Migrating config from pre-1.0.0 to current version...');
+    config.configVersion = CONFIG_VERSION;
+    if (config.skipTerminologyReport === undefined) {
+      config.skipTerminologyReport = false;
+    }
+    return config;
+  }
+  
+  const [major, minor, patch] = config.configVersion.split('.').map(Number);
+  
+  // Migrate from 1.0.0 or 1.0.1 to 1.0.2
+  if (major === 1 && minor === 0 && (patch === 0 || patch === 1)) {
+    console.log(`  Migrating config from ${config.configVersion} to ${CONFIG_VERSION}...`);
+    if (config.skipTerminologyReport === undefined) {
+      config.skipTerminologyReport = false;
+    }
+    config.configVersion = CONFIG_VERSION;
+  }
+  
+  return config;
 }
 
 /**
@@ -99,6 +138,10 @@ function validateConfig(config) {
   if (typeof config.exportZip !== 'boolean') {
     errors.push('exportZip must be a boolean');
   }
+
+  if (typeof config.skipTerminologyReport !== 'boolean') {
+    errors.push('skipTerminologyReport must be a boolean');
+  }
   
   if (errors.length > 0) {
     throw new Error(`Invalid configuration:\n${errors.map(e => `  - ${e}`).join('\n')}`);
@@ -122,7 +165,8 @@ export async function createExampleConfig(outputPath) {
     validatorJarPath: null,
     workdir: null,
     compareMode: 'incremental',
-    exportZip: true
+    exportZip: true,
+    skipTerminologyReport: false
   };
   
   await fsp.writeFile(

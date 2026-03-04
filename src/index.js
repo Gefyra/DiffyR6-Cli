@@ -10,11 +10,15 @@ import { compareProfiles } from './compare-profiles.js';
 import { compareTerminology } from './compare-terminology.js';
 import { findRemovedResources } from './utils/removed-resources.js';
 import { createZip } from './utils/zip.js';
+import { checkForUpdates } from './utils/update-check.js';
 
 /**
  * Main entry point - runs the FHIR R4 to R6 migration pipeline
  */
 export async function runMigration(config) {
+  // Check for updates
+  await checkForUpdates();
+  
   // Resolve paths
   const workdir = config.workdir ? path.resolve(config.workdir) : process.cwd();
   const resourcesDir = path.resolve(workdir, config.resourcesDir);
@@ -70,16 +74,20 @@ export async function runMigration(config) {
   context.steps.push('report');
 
   // Step 5: Compare terminology bindings
-  console.log('\n[5/5] Comparing terminology bindings...');
   let terminologyReport = null;
-  try {
-    terminologyReport = await runTerminologyComparison(context);
-    if (terminologyReport) {
-      context.steps.push('terminology');
+  if (config.skipTerminologyReport) {
+    console.log('\n[5/5] Terminology comparison - SKIPPED (skipTerminologyReport is enabled)');
+  } else {
+    console.log('\n[5/5] Comparing terminology bindings...');
+    try {
+      terminologyReport = await runTerminologyComparison(context);
+      if (terminologyReport) {
+        context.steps.push('terminology');
+      }
+    } catch (error) {
+      console.warn(`  Terminology comparison failed: ${error.message}`);
+      console.warn('  Continuing without terminology report...');
     }
-  } catch (error) {
-    console.warn(`  Terminology comparison failed: ${error.message}`);
-    console.warn('  Continuing without terminology report...');
   }
 
   let exportZipPath = null;
