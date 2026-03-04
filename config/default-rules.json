@@ -56,7 +56,7 @@
               "valueColumn": "R Type"
             }
           ],
-          "template": "The element type switched in R6 at element {{Name}}"
+          "template": "The element type switched in R6 at element {{Name}} from {{L Type}} to {{R Type}}"
         },
         {
           "name": "Element removed in R6",
