@@ -107,6 +107,19 @@ fhir-r6-migrate --version
 fhir-r6-migrate --help
 ```
 
+**Managing Multiple IGs in Parallel**
+
+The `--config` parameter enables you to manage multiple implementation guides simultaneously. To do this, create separate config files for each IG and adjust the `workdir` field to point to different directories. All other paths (like `resourcesDir`, `resourcesR6Dir`, `compareDir`, and `outputDir`) can remain the same across configs, as they will be resolved relative to each specific `workdir`.
+
+Example:
+```bash
+# IG 1 configuration (config-basisprofil.json with "workdir": "./igs/basisprofil")
+fhir-r6-migrate --config config-basisprofil.json
+
+# IG 2 configuration (config-medikation.json with "workdir": "./igs/medikation") 
+fhir-r6-migrate --config config-medikation.json
+```
+
 ### Programmatic Usage
 
 ```javascript
@@ -301,10 +314,18 @@ The package includes a default set of rules for common migration issues. You can
 
 The impact score is calculated by summing the `value` field from all rule matches across all differences found.
 
+**Purpose:**
+
+The score is designed to **estimate the effort required for analysis**, not the effort required for the migration itself. Each finding represents a structural difference that requires review and evaluation to determine its implications for your implementation.
+
+**Why there are no zero scores:**
+
+Every detected element receives a score value, even for seemingly minor differences. This reflects the principle that each finding deserves at least a moment of attention during the analysis phase. Even small structural changes may have unexpected consequences that need to be evaluated in the context of your specific use case.
+
 **Interpretation:**
-- **0-50**: Low impact - minor differences, straightforward adaptation
-- **51-150**: Medium impact - moderate structural changes requiring attention
-- **151+**: High impact - significant breaking changes and redesign needed
+- **0-50**: Low analysis effort - minor differences, straightforward review
+- **51-150**: Medium analysis effort - moderate structural changes requiring careful attention
+- **151+**: High analysis effort - significant differences requiring thorough evaluation and planning
 
 ## Output
 
