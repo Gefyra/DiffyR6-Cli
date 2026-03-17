@@ -45,8 +45,8 @@
           "template": "For element {{Name}}, the cardinality changed in R6 and it had an MS in R4: {{Comments}}"
         },
         {
-          "name": "Element type changed in R6",
-          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration. Note that changes from 'string' to 'id' are not included in this rule.",
+          "name": "Element type changed in R6 at Must-Support",
+          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration.",
           "rank": 15,
           "value": 10,
           "conditions": [
@@ -69,6 +69,11 @@
               "column": "L Type",
               "operator": "!equals",
               "valueColumn": "R Type"
+            },
+            {
+              "column": "L Flags",
+              "operator": "contains",
+              "value": "This element must be supported"
             }
           ],
           "template": "The element type switched in R6 at element {{Name}} from {{L Type}} to {{R Type}}"
@@ -77,12 +82,17 @@
           "name": "Element removed in R6",
           "description": "An element from R4 no longer exists in R6. Data in this element may need to be migrated to another element or discarded.",
           "rank": 50,
-          "value": 2,
+          "value": 0,
           "conditions": [
             {
               "column": "Comments",
               "operator": "equals",
               "value": "Removed this element"
+            },
+            {
+              "column": "L Flags",
+              "operator": "!contains",
+              "value": "This element must be supported"
             }
           ],
           "template": "The element {{Name}} exists in R4 but was removed in R6."
@@ -110,7 +120,7 @@
           "name": "Element added in R6",
           "description": "A new optional element has been added in R6. This is usually unproblematic and offers new possibilities for data modeling.",
           "rank": 60,
-          "value": 2,
+          "value": 1,
           "conditions": [
             {
               "column": "Comments",
@@ -124,15 +134,49 @@
           "name": "Change in cardinality",
           "description": "The cardinality of an element has changed. Check whether this affects your implementation.",
           "rank": 40,
-          "value": 5,
+          "value": 0,
           "conditions": [
             {
               "column": "Comments",
               "operator": "contains",
               "value": "cardinalities differ"
+            },
+            {
+              "column": "L Flags",
+              "operator": "!contains",
+              "value": "This element must be supported"
             }
           ],
           "template": "For element {{Name}}, the cardinality changed in R6: {{Comments}}"
+        },
+        {
+          "name": "Element type changed in R6",
+          "description": "The data type of an element has changed between R4 and R6. This may require data transformation during migration.",
+          "rank": 40,
+          "value": 0,
+          "conditions": [
+            {
+              "column": "R Type",
+              "operator": "!equals",
+              "value": "id"
+            },
+            {
+              "column": "L Type",
+              "operator": "!equals",
+              "value": ""
+            },
+            {
+              "column": "R Type",
+              "operator": "!equals",
+              "value": ""
+            },
+            {
+              "column": "L Type",
+              "operator": "!equals",
+              "valueColumn": "R Type"
+            }
+          ],
+          "template": "The element type switched in R6 at element {{Name}} from {{L Type}} to {{R Type}}"
         },
         {
           "name": "R5 Preadoption Extensions",
