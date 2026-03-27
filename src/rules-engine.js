@@ -565,7 +565,7 @@ function evaluateCondition(condition, row, lookup) {
   }
   const cellValue = row.values[columnAlias] || '';
   const expected = resolveExpectedValue(condition, row, lookup);
-  const operator = (condition.operator || '').toLowerCase();
+  const operator = normalizeOperator(condition.operator || '');
   const caseSensitive = Boolean(condition.caseSensitive);
   if (operator === 'equals') {
     return compareEquals(cellValue, expected, caseSensitive);
@@ -576,7 +576,21 @@ function evaluateCondition(condition, row, lookup) {
   if (operator === 'contains') {
     return compareContains(cellValue, expected, caseSensitive);
   }
+  if (operator === 'typesubsetof') {
+    return typeListIsSubset(cellValue, expected);
+  }
+  if (operator === '!typesubsetof') {
+    return !typeListIsSubset(cellValue, expected);
+  }
   return false;
+}
+
+function normalizeOperator(operator) {
+  const value = String(operator).trim().toLowerCase();
+  if (value === 'nottypesubsetof' || value === 'not-typesubsetof') {
+    return '!typesubsetof';
+  }
+  return value;
 }
 
 function resolveExpectedValue(condition, row, lookup) {
@@ -609,6 +623,102 @@ function compareContains(left, right, caseSensitive) {
     return String(left).includes(String(right));
   }
   return String(left).toLowerCase().includes(String(right).toLowerCase());
+}
+
+function normalizeTypeName(name) {
+  return String(name)
+    .trim()
+    .replace(/[- ]?r[46]$/i, '')
+    .toLowerCase();
+}
+
+function normalizeReferenceGroup(referenceStr) {
+  const match = String(referenceStr)
+    .trim()
+    .match(/^reference\s*\((.*)\)$/i);
+  if (!match) {
+    return `reference:${normalizeTypeName(referenceStr)}`;
+  }
+  const normalizedTargets = match[1]
+    .split('|')
+    .map((token) => normalizeTypeName(token))
+    .filter(Boolean)
+    .sort();
+  return `reference:${normalizedTargets.join('|')}`;
+}
+
+function parseTypeList(typeStr) {
+  const types = new Set();
+  const references = [];
+  let current = '';
+  let depth = 0;
+
+  const pushCurrent = () => {
+    const token = current.trim();
+    current = '';
+    if (!token) {
+      return;
+    }
+    if (token.toLowerCase().startsWith('reference')) {
+      references.push(parseReferenceTargets(token));
+      return;
+    }
+    const normalized = normalizeTypeName(token);
+    if (normalized) {
+      types.add(normalized);
+    }
+  };
+
+  for (const char of String(typeStr)) {
+    if (char === '(') {
+      depth += 1;
+      current += char;
+      continue;
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+    if (char === ',' && depth === 0) {
+      pushCurrent();
+      continue;
+    }
+    current += char;
+  }
+
+  pushCurrent();
+  return { types, references };
+}
+
+function parseReferenceTargets(referenceStr) {
+  const normalized = normalizeReferenceGroup(referenceStr);
+  const [, targetList = ''] = normalized.split(':');
+  return new Set(targetList.split('|').filter(Boolean));
+}
+
+function typeListIsSubset(leftStr, rightStr) {
+  const leftTypes = parseTypeList(leftStr);
+  const rightTypes = parseTypeList(rightStr);
+  for (const type of leftTypes.types) {
+    if (!rightTypes.types.has(type)) {
+      return false;
+    }
+  }
+  for (const leftReference of leftTypes.references) {
+    const hasSuperset = rightTypes.references.some((rightReference) => {
+      for (const target of leftReference) {
+        if (!rightReference.has(target)) {
+          return false;
+        }
+      }
+      return true;
+    });
+    if (!hasSuperset) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function renderTemplate(template, variables) {

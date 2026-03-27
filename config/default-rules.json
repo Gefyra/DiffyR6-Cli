@@ -67,7 +67,7 @@
             },
             {
               "column": "L Type",
-              "operator": "!equals",
+              "operator": "!typeSubsetOf",
               "valueColumn": "R Type"
             },
             {
@@ -172,7 +172,7 @@
             },
             {
               "column": "L Type",
-              "operator": "!equals",
+              "operator": "!typeSubsetOf",
               "valueColumn": "R Type"
             }
           ],
