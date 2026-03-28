@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Note on versioning:** Minor bugfixes and patches that don't introduce new features are released as patch versions (e.g., 1.1.1, 1.1.2) and are not explicitly listed in this changelog. Only feature releases (minor versions) and breaking changes (major versions) are documented here.
 
+## [1.2.0] - 2026-03-28
+
+### Added
+- SearchParameter analysis for CapabilityStatements to detect references to search parameters removed from R6
+- Dedicated `searchparameter-report-<timestamp>.md` and `.json` outputs
+- New configuration option `skipSearchParameterReport`
+- Recursive CapabilityStatement scanning across `resourcesDir`, including manually placed JSON files outside `fsh-generated/resources`
+- SearchParameter report metadata including affected CapabilityStatement count and per-match source file information
+
+### Changed
+- ZIP export now includes the newest available terminology and SearchParameter reports from `outputDir` when present, even if they were not regenerated in the current run
+- ZIP export now selects only one report set per type and uses the newest available matching report pair
+- SearchParameter report `sourceFile` paths are now written relative to the analyzed project directory instead of absolute filesystem paths
+- Runner pipeline extended with a seventh step for SearchParameter analysis
+- Configuration schema updated to version `1.0.3` with automatic migration for existing config files
+
+### Fixed
+- Broken runner step logging around report generation
+- Missing config migration path for adding `skipSearchParameterReport` to existing configurations
+- Missing SearchParameter report inclusion in ZIP exports when reusing existing report files
+
 ## [1.1.*] - 2026-01-28
 
 ### Added
@@ -60,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resume capability via filesystem checks
 - Timestamped report filenames
 
-[Unreleased]: https://github.com/Gefyra/fhir-r6-migration-runner/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Gefyra/fhir-r6-migration-runner/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Gefyra/fhir-r6-migration-runner/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Gefyra/fhir-r6-migration-runner/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Gefyra/fhir-r6-migration-runner/releases/tag/v1.0.0
