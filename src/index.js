@@ -8,6 +8,7 @@ import { generateFshFromPackage } from './generate-fsh.js';
 import { upgradeSushiToR6 } from './upgrade-sushi.js';
 import { compareProfiles } from './compare-profiles.js';
 import { compareTerminology, hasSnapshots, runSushiWithSnapshots } from './compare-terminology.js';
+import { compareSearchParameters } from './compare-searchparameters.js';
 import { findRemovedResources } from './utils/removed-resources.js';
 import { createZip } from './utils/zip.js';
 import { checkForUpdates } from './utils/update-check.js';
@@ -38,42 +39,45 @@ export async function runMigration(config) {
     outputDir,
     steps: [],
   };
+
+  const totalSteps = 7;
   
   // Step 1: GoFSH (if enabled and not already done)
   if (config.enableGoFSH) {
     const shouldRunGoFSH = await checkShouldRunGoFSH(resourcesDir);
     if (shouldRunGoFSH) {
-      console.log('\n[1/6] Downloading package and generating FSH...');
+      console.log(`\n[1/${totalSteps}] Downloading package and generating FSH...`);
       await runGoFSH(context);
       context.steps.push('gofsh');
     } else {
-      console.log('\n[1/6] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)');
+      console.log(`\n[1/${totalSteps}] GoFSH - SKIPPED (Resources directory with sushi-config.yaml already exists)`);
     }
   } else {
-    console.log('\n[1/6] GoFSH - DISABLED in config');
+    console.log(`\n[1/${totalSteps}] GoFSH - DISABLED in config`);
   }
   
   // Step 2: Upgrade to R6
   const shouldRunUpgrade = await checkShouldRunUpgrade(resourcesR6Dir);
   if (shouldRunUpgrade) {
-    console.log('\n[2/6] Upgrading to R6...');
+    console.log(`\n[2/${totalSteps}] Upgrading to R6...`);
     await runUpgradeToR6(context);
     context.steps.push('upgrade');
   } else {
-    console.log('\n[2/6] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)');
+    console.log(`\n[2/${totalSteps}] Upgrade - SKIPPED (ResourcesR6 directory with sushi-config.yaml already exists)`);
   }
   
   // Step 3: Build snapshots for both R4 and R6
-  console.log('\n[3/6] Building snapshots with SUSHI...');
+  console.log(`\n[3/${totalSteps}] Building snapshots with SUSHI...`);
   await runSnapshotBuild(context);
   context.steps.push('snapshots');
   
   // Step 4: Compare profiles
-  console.log('\n[4/6] Comparing R4 vs R6 profiles...');
+  console.log(`\n[4/${totalSteps}] Comparing R4 vs R6 profiles...`);
   const compareResults = await runProfileComparison(context);
   context.steps.push('compare');
   
-  // Step 5: Generat6] Generating migration report...');
+  // Step 5: Generate migration report
+  console.log(`\n[5/${totalSteps}] Generating migration report...`);
   const removedResources = await findRemovedResources(resourcesDir);
   const report = await generateReport(context, compareResults, removedResources);
   context.steps.push('report');
@@ -81,9 +85,9 @@ export async function runMigration(config) {
   // Step 6: Compare terminology bindings
   let terminologyReport = null;
   if (config.skipTerminologyReport) {
-    console.log('\n[6/6] Terminology comparison - SKIPPED (skipTerminologyReport is enabled)');
+    console.log(`\n[6/${totalSteps}] Terminology comparison - SKIPPED (skipTerminologyReport is enabled)`);
   } else {
-    console.log('\n[6/6] Comparing terminology bindings...');
+    console.log(`\n[6/${totalSteps}] Comparing terminology bindings...`);
     try {
       terminologyReport = await runTerminologyComparison(context);
       if (terminologyReport) {
@@ -95,10 +99,26 @@ export async function runMigration(config) {
     }
   }
 
+  let searchParameterReport = null;
+  if (config.skipSearchParameterReport) {
+    console.log(`\n[7/${totalSteps}] SearchParameter report - SKIPPED (skipSearchParameterReport is enabled)`);
+  } else {
+    console.log(`\n[7/${totalSteps}] Analyzing removed search parameters...`);
+    try {
+      searchParameterReport = await runSearchParameterComparison(context);
+      if (searchParameterReport) {
+        context.steps.push('searchParameters');
+      }
+    } catch (error) {
+      console.warn(`  SearchParameter analysis failed: ${error.message}`);
+      console.warn('  Continuing without search parameter report...');
+    }
+  }
+
   let exportZipPath = null;
   if (config.exportZip) {
     console.log('\nGenerating export ZIP...');
-    exportZipPath = await exportComparisonZip(context, report, terminologyReport);
+    exportZipPath = await exportComparisonZip(context, report, terminologyReport, searchParameterReport);
     context.steps.push('exportZip');
   }
   
@@ -106,6 +126,12 @@ export async function runMigration(config) {
   console.log(`  Report: ${report.path}`);
   console.log(`  Total Score: ${report.score}`);
   console.log(`  Findings: ${report.findingsCount}`);
+  if (terminologyReport?.path) {
+    console.log(`  Terminology report: ${terminologyReport.path}`);
+  }
+  if (searchParameterReport?.path) {
+    console.log(`  SearchParameter report: ${searchParameterReport.path}`);
+  }
   if (exportZipPath) {
     console.log(`  Export ZIP: ${exportZipPath}`);
   }
@@ -239,6 +265,25 @@ async function runTerminologyComparison(context) {
   return result;
 }
 
+async function runSearchParameterComparison(context) {
+  const { resourcesDir, outputDir, config } = context;
+
+  const options = {
+    debug: config.debug || false,
+  };
+
+  const result = await compareSearchParameters(resourcesDir, outputDir, options);
+
+  if (result) {
+    console.log(`  Removed search parameter matches: ${result.matchCount}`);
+    console.log(`  Affected CapabilityStatements: ${result.affectedCpsCount}`);
+    console.log(`  Markdown report: ${result.path}`);
+    console.log(`  JSON report: ${result.jsonPath}`);
+  }
+
+  return result;
+}
+
 /**
  * Get list of profiles that need to be compared
  */
@@ -341,7 +386,7 @@ async function generateReport(context, compareResults, removedResources = []) {
 /**
  * Create a ZIP export with compare HTML files, report, and run config
  */
-async function exportComparisonZip(context, report, terminologyReport = null) {
+async function exportComparisonZip(context, report, terminologyReport = null, searchParameterReport = null) {
   const { compareDir, outputDir, config } = context;
   const exportFilename = 'diffyr6-publish.zip';
   const exportPath = path.join(outputDir, exportFilename);
@@ -368,22 +413,43 @@ async function exportComparisonZip(context, report, terminologyReport = null) {
     mtime: (await fsp.stat(report.path)).mtime,
   });
 
+  const terminologyReportForZip = await resolveReportForZip(outputDir, 'terminology-report', terminologyReport);
+  const searchParameterReportForZip = await resolveReportForZip(outputDir, 'searchparameter-report', searchParameterReport);
+
   // Add terminology report if available
-  if (terminologyReport && terminologyReport.path) {
-    const termContent = await fsp.readFile(terminologyReport.path);
+  if (terminologyReportForZip?.path) {
+    const termContent = await fsp.readFile(terminologyReportForZip.path);
     entries.push({
-      name: terminologyReport.filename,
+      name: terminologyReportForZip.filename,
       data: termContent,
-      mtime: (await fsp.stat(terminologyReport.path)).mtime,
+      mtime: (await fsp.stat(terminologyReportForZip.path)).mtime,
     });
     
     // Add terminology JSON if available
-    if (terminologyReport.jsonPath) {
-      const termJsonContent = await fsp.readFile(terminologyReport.jsonPath);
+    if (terminologyReportForZip.jsonPath) {
+      const termJsonContent = await fsp.readFile(terminologyReportForZip.jsonPath);
       entries.push({
-        name: terminologyReport.jsonFilename,
+        name: terminologyReportForZip.jsonFilename,
         data: termJsonContent,
-        mtime: (await fsp.stat(terminologyReport.jsonPath)).mtime,
+        mtime: (await fsp.stat(terminologyReportForZip.jsonPath)).mtime,
+      });
+    }
+  }
+
+  if (searchParameterReportForZip?.path) {
+    const searchParamContent = await fsp.readFile(searchParameterReportForZip.path);
+    entries.push({
+      name: searchParameterReportForZip.filename,
+      data: searchParamContent,
+      mtime: (await fsp.stat(searchParameterReportForZip.path)).mtime,
+    });
+
+    if (searchParameterReportForZip.jsonPath) {
+      const searchParamJsonContent = await fsp.readFile(searchParameterReportForZip.jsonPath);
+      entries.push({
+        name: searchParameterReportForZip.jsonFilename,
+        data: searchParamJsonContent,
+        mtime: (await fsp.stat(searchParameterReportForZip.jsonPath)).mtime,
       });
     }
   }
@@ -397,6 +463,57 @@ async function exportComparisonZip(context, report, terminologyReport = null) {
 
   await createZip(exportPath, entries);
   return exportPath;
+}
+
+async function resolveReportForZip(outputDir, prefix, currentReport = null) {
+  if (currentReport?.path && await fileExists(currentReport.path)) {
+    return currentReport;
+  }
+
+  const latestReport = await findLatestExistingReport(outputDir, prefix);
+  return latestReport;
+}
+
+async function findLatestExistingReport(outputDir, prefix) {
+  const exists = await directoryExists(outputDir);
+  if (!exists) {
+    return null;
+  }
+
+  const entries = await fsp.readdir(outputDir).catch(() => []);
+  const reportFiles = entries.filter(name => new RegExp(`^${escapeRegex(prefix)}-.+\\.(md|json)$`, 'i').test(name));
+  if (reportFiles.length === 0) {
+    return null;
+  }
+
+  const groups = new Map();
+  for (const filename of reportFiles) {
+    const ext = path.extname(filename).toLowerCase();
+    const stem = filename.slice(0, -ext.length);
+    const filePath = path.join(outputDir, filename);
+    const stat = await fsp.stat(filePath).catch(() => null);
+    if (!stat?.isFile()) {
+      continue;
+    }
+
+    const existing = groups.get(stem) || { stem, latestMtimeMs: 0 };
+    existing.latestMtimeMs = Math.max(existing.latestMtimeMs, stat.mtimeMs);
+    if (ext === '.md') {
+      existing.path = filePath;
+      existing.filename = filename;
+    } else if (ext === '.json') {
+      existing.jsonPath = filePath;
+      existing.jsonFilename = filename;
+    }
+    groups.set(stem, existing);
+  }
+
+  const sorted = Array.from(groups.values()).sort((a, b) => b.latestMtimeMs - a.latestMtimeMs);
+  return sorted[0] || null;
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function listExportHtmlFiles(compareDir) {

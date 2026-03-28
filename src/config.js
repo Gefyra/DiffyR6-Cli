@@ -6,7 +6,7 @@ import { pathExists } from './utils/fs.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const CONFIG_VERSION = '1.0.2';
+export const CONFIG_VERSION = '1.0.3';
 
 /**
  * Default configuration values
@@ -26,6 +26,7 @@ export const DEFAULT_CONFIG = {
   compareMode: 'incremental',
   exportZip: true,
   skipTerminologyReport: false,
+  skipSearchParameterReport: false,
 };
 
 /**
@@ -68,16 +69,30 @@ function migrateConfig(config) {
     if (config.skipTerminologyReport === undefined) {
       config.skipTerminologyReport = false;
     }
+    if (config.skipSearchParameterReport === undefined) {
+      config.skipSearchParameterReport = false;
+    }
     return config;
   }
   
   const [major, minor, patch] = config.configVersion.split('.').map(Number);
   
-  // Migrate from 1.0.0 or 1.0.1 to 1.0.2
+  // Migrate from 1.0.0 or 1.0.1 to 1.0.2/1.0.3
   if (major === 1 && minor === 0 && (patch === 0 || patch === 1)) {
     console.log(`  Migrating config from ${config.configVersion} to ${CONFIG_VERSION}...`);
     if (config.skipTerminologyReport === undefined) {
       config.skipTerminologyReport = false;
+    }
+    if (config.skipSearchParameterReport === undefined) {
+      config.skipSearchParameterReport = false;
+    }
+    config.configVersion = CONFIG_VERSION;
+  }
+
+  if (major === 1 && minor === 0 && patch === 2) {
+    console.log(`  Migrating config from ${config.configVersion} to ${CONFIG_VERSION}...`);
+    if (config.skipSearchParameterReport === undefined) {
+      config.skipSearchParameterReport = false;
     }
     config.configVersion = CONFIG_VERSION;
   }
@@ -142,6 +157,10 @@ function validateConfig(config) {
   if (typeof config.skipTerminologyReport !== 'boolean') {
     errors.push('skipTerminologyReport must be a boolean');
   }
+
+  if (typeof config.skipSearchParameterReport !== 'boolean') {
+    errors.push('skipSearchParameterReport must be a boolean');
+  }
   
   if (errors.length > 0) {
     throw new Error(`Invalid configuration:\n${errors.map(e => `  - ${e}`).join('\n')}`);
@@ -166,7 +185,8 @@ export async function createExampleConfig(outputPath) {
     workdir: null,
     compareMode: 'incremental',
     exportZip: true,
-    skipTerminologyReport: false
+    skipTerminologyReport: false,
+    skipSearchParameterReport: false
   };
   
   await fsp.writeFile(
