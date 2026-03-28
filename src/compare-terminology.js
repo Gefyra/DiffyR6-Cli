@@ -54,10 +54,13 @@ export async function compareTerminology(resourcesDir, resourcesR6Dir, outputDir
   console.log(`  Found ${findings.length} profile(s) with binding differences`);
   
   // Identify common bindings across all profiles
-  const commonBindings = identifyCommonBindings(findings);
+  const commonBindings = sortFindings(identifyCommonBindings(findings));
   
   // Remove common bindings from individual profiles
-  const filteredFindings = removeCommonBindingsFromProfiles(findings, commonBindings);
+  const filteredFindings = removeCommonBindingsFromProfiles(findings, commonBindings).map(profile => ({
+    ...profile,
+    findings: sortFindings(profile.findings),
+  }));
   
   // Generate reports
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
@@ -280,6 +283,7 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
       findings.push({
         type: 'new-binding',
         path,
+        isMustSupport: isMustSupportElement(r6Elem),
         r6Binding: r6Elem.binding,
       });
       continue;
@@ -297,6 +301,7 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
       const finding = {
         type: 'strength-and-valueset-change',
         path,
+        isMustSupport: isMustSupportElement(r4Elem) || isMustSupportElement(r6Elem),
         r4Strength: r4Binding.strength,
         r6Strength: r6Binding.strength,
         r4ValueSet: r4Binding.valueSet,
@@ -328,6 +333,7 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
         findings.push({
           type: 'strength-change',
           path,
+          isMustSupport: isMustSupportElement(r4Elem) || isMustSupportElement(r6Elem),
           r4Strength: r4Binding.strength,
           r6Strength: r6Binding.strength,
           r4ValueSet: r4Binding.valueSet,
@@ -341,6 +347,7 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
       findings.push({
         type: 'strength-change',
         path,
+        isMustSupport: isMustSupportElement(r4Elem) || isMustSupportElement(r6Elem),
         r4Strength: r4Binding.strength,
         r6Strength: r6Binding.strength,
         r4ValueSet: r4Binding.valueSet,
@@ -351,6 +358,7 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
       const finding = {
         type: 'valueset-change',
         path,
+        isMustSupport: isMustSupportElement(r4Elem) || isMustSupportElement(r6Elem),
         r4ValueSet: r4Binding.valueSet,
         r6ValueSet: r6Binding.valueSet,
         r4Strength: r4Binding.strength,
@@ -392,12 +400,17 @@ async function compareProfileBindings(r4Profile, r6Profile, options = {}) {
       findings.push({
         type: 'removed-binding',
         path,
+        isMustSupport: isMustSupportElement(r4Elem),
         r4Binding: r4Elem.binding,
       });
     }
   }
   
   return findings;
+}
+
+function isMustSupportElement(element) {
+  return element?.mustSupport === true;
 }
 
 /**
@@ -756,6 +769,38 @@ function groupFindingsByType(findings) {
   return byType;
 }
 
+function sortFindings(findings) {
+  return [...findings].sort((left, right) => {
+    if ((left.isMustSupport === true) !== (right.isMustSupport === true)) {
+      return left.isMustSupport === true ? -1 : 1;
+    }
+    const pathCompare = (left.path || '').localeCompare(right.path || '');
+    if (pathCompare !== 0) {
+      return pathCompare;
+    }
+    return (left.type || '').localeCompare(right.type || '');
+  });
+}
+
+function splitFindingsByMustSupport(findings) {
+  const mustSupport = [];
+  const others = [];
+
+  for (const finding of findings) {
+    if (finding.isMustSupport === true) {
+      mustSupport.push(finding);
+    } else {
+      others.push(finding);
+    }
+  }
+
+  return { mustSupport, others };
+}
+
+function appendFindingMetadata(lines, finding) {
+  lines.push(`- Must Support: ${finding.isMustSupport === true ? 'yes' : 'no'}`);
+}
+
 /**
  * Append findings to markdown lines
  */
@@ -767,6 +812,7 @@ function appendFindingsToMarkdown(lines, byType) {
     
     for (const f of byType['strength-and-valueset-change']) {
       lines.push(`**${f.path}**`);
+      appendFindingMetadata(lines, f);
       lines.push(`- Strength: \`${f.r4Strength}\` → \`${f.r6Strength}\``);
       lines.push(`- R4 ValueSet: ${f.r4ValueSet || 'none'}`);
       lines.push(`- R6 ValueSet: ${f.r6ValueSet || 'none'}`);
@@ -818,6 +864,7 @@ function appendFindingsToMarkdown(lines, byType) {
     
     for (const f of byType['strength-change']) {
       lines.push(`**${f.path}**`);
+      appendFindingMetadata(lines, f);
       lines.push(`- Strength: \`${f.r4Strength}\` → \`${f.r6Strength}\``);
       if (f.r4ValueSet) {
         lines.push(`- ValueSet (R4): ${f.r4ValueSet}`);
@@ -836,6 +883,7 @@ function appendFindingsToMarkdown(lines, byType) {
     
     for (const f of byType['valueset-change']) {
       lines.push(`**${f.path}**`);
+      appendFindingMetadata(lines, f);
       lines.push(`- R4 ValueSet: ${f.r4ValueSet || 'none'}`);
       lines.push(`- R6 ValueSet: ${f.r6ValueSet || 'none'}`);
       
@@ -890,6 +938,7 @@ function appendFindingsToMarkdown(lines, byType) {
     
     for (const f of byType['new-binding']) {
       lines.push(`**${f.path}**`);
+      appendFindingMetadata(lines, f);
       if (f.r6Binding?.valueSet) {
         lines.push(`- ValueSet: ${f.r6Binding.valueSet}`);
       }
@@ -907,6 +956,7 @@ function appendFindingsToMarkdown(lines, byType) {
     
     for (const f of byType['removed-binding']) {
       lines.push(`**${f.path}**`);
+      appendFindingMetadata(lines, f);
       if (f.r4Binding?.valueSet) {
         lines.push(`- ValueSet (R4): ${f.r4Binding.valueSet}`);
       }
@@ -923,11 +973,24 @@ function appendFindingsToMarkdown(lines, byType) {
  */
 function generateTerminologyReport(findings, commonBindings = []) {
   const lines = [];
+  const sortedProfiles = sortProfilesAlphabetically(findings);
+  const mustSupportProfiles = sortedProfiles
+    .map(profile => ({
+      ...profile,
+      findings: profile.findings.filter(finding => finding.isMustSupport === true),
+    }))
+    .filter(profile => profile.findings.length > 0);
+  const otherProfiles = sortedProfiles
+    .map(profile => ({
+      ...profile,
+      findings: profile.findings.filter(finding => finding.isMustSupport !== true),
+    }))
+    .filter(profile => profile.findings.length > 0);
   
   lines.push('# Terminology Binding Comparison Report');
   lines.push('');
   lines.push(`**Generated:** ${new Date().toISOString()}`);
-  lines.push(`**Profiles with Differences:** ${findings.length}`);
+  lines.push(`**Profiles with Differences:** ${sortedProfiles.length}`);
   if (commonBindings.length > 0) {
     lines.push(`**Common Bindings Across All Profiles:** ${commonBindings.length}`);
   }
@@ -943,34 +1006,75 @@ function generateTerminologyReport(findings, commonBindings = []) {
     lines.push('');
     lines.push('The following binding changes occur in **all** profiles:');
     lines.push('');
-    
-    const groupedCommon = groupFindingsByType(commonBindings);
-    appendFindingsToMarkdown(lines, groupedCommon);
+
+    appendMustSupportSections(lines, commonBindings);
     
     lines.push('---');
     lines.push('');
   }
   
-  if (findings.length === 0) {
+  if (sortedProfiles.length === 0) {
     lines.push('✅ **No profile-specific binding differences found.**');
     lines.push('');
     return lines.join('\n');
   }
-  
-  for (const profile of findings) {
-    lines.push(`## ${profile.profileName}`);
+
+  if (mustSupportProfiles.length > 0) {
+    lines.push('## Must Support');
     lines.push('');
-    lines.push(`- **R4 URL:** ${profile.r4Url}`);
-    lines.push(`- **R6 URL:** ${profile.r6Url}`);
-    lines.push(`- **Differences:** ${profile.findings.length}`);
+    lines.push('The following profiles contain binding differences on Must-Support elements:');
     lines.push('');
-    
-    const groupedFindings = groupFindingsByType(profile.findings);
-    appendFindingsToMarkdown(lines, groupedFindings);
-    
-    lines.push('---');
+
+    for (const profile of mustSupportProfiles) {
+      appendProfileSection(lines, profile);
+    }
+  }
+
+  if (otherProfiles.length > 0) {
+    lines.push('## Non Must Support');
     lines.push('');
+    lines.push('The following profiles contain binding differences on elements without Must Support:');
+    lines.push('');
+
+    for (const profile of otherProfiles) {
+      appendProfileSection(lines, profile);
+    }
   }
   
   return lines.join('\n');
+}
+
+function appendMustSupportSections(lines, findings) {
+  const sortedFindings = sortFindings(findings);
+  const { mustSupport, others } = splitFindingsByMustSupport(sortedFindings);
+
+  if (mustSupport.length > 0) {
+    lines.push('### Must Support Elements');
+    lines.push('');
+    appendFindingsToMarkdown(lines, groupFindingsByType(mustSupport));
+  }
+
+  if (others.length > 0) {
+    lines.push('### Other Elements');
+    lines.push('');
+    appendFindingsToMarkdown(lines, groupFindingsByType(others));
+  }
+}
+
+function appendProfileSection(lines, profile) {
+  lines.push(`### ${profile.profileName}`);
+  lines.push('');
+  lines.push(`- **R4 URL:** ${profile.r4Url}`);
+  lines.push(`- **R6 URL:** ${profile.r6Url}`);
+  lines.push(`- **Differences:** ${profile.findings.length}`);
+  lines.push('');
+  appendFindingsToMarkdown(lines, groupFindingsByType(sortFindings(profile.findings)));
+  lines.push('---');
+  lines.push('');
+}
+
+function sortProfilesAlphabetically(profiles) {
+  return [...profiles].sort((left, right) =>
+    (left.profileName || '').localeCompare(right.profileName || '')
+  );
 }

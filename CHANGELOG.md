@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Note on versioning:** Minor bugfixes and patches that don't introduce new features are released as patch versions (e.g., 1.1.1, 1.1.2) and are not explicitly listed in this changelog. Only feature releases (minor versions) and breaking changes (major versions) are documented here.
 
-## [1.2.0] - 2026-03-28
+## [1.2.*] - 2026-03-28
 
 ### Added
 - SearchParameter analysis for CapabilityStatements to detect references to search parameters removed from R6
@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New configuration option `skipSearchParameterReport`
 - Recursive CapabilityStatement scanning across `resourcesDir`, including manually placed JSON files outside `fsh-generated/resources`
 - SearchParameter report metadata including affected CapabilityStatement count and per-match source file information
+- The terminology report now sorted by 'must support'
 
 ### Changed
 - ZIP export now includes the newest available terminology and SearchParameter reports from `outputDir` when present, even if they were not regenerated in the current run
