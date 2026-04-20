@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - All relative paths in the config file (`resourcesDir`, `resourcesR6Dir`, `compareDir`, `outputDir`, `workdir`, `rulesConfigPath`, `validatorJarPath`) are now resolved relative to the config file's location instead of the current working directory. This means `fhir-r6-migrate --config ./igs/example/migrate-config.json` now works correctly regardless of where the command is executed.
+- Step 2 (Upgrade to R6) now recovers from a previously interrupted copy: if the target directory exists but contains no `sushi-config.yaml` (indicating a partial copy from a failed prior run), it is automatically deleted before retrying. Additionally, if the copy itself fails, the partial directory is cleaned up immediately so the next run can retry cleanly.
 
 ## [1.2.*] - 2026-03-28
 

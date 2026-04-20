@@ -48,10 +48,24 @@ async function createR6Workspace(sourceDir) {
   const targetDir = deriveR6Path(sourceDir);
   const exists = await pathExists(targetDir);
   if (exists) {
-    throw new Error(`Target directory already exists: ${targetDir}`);
+    // A directory without sushi-config.yaml means the previous copy failed partway through.
+    // Clean it up so we can retry with a fresh copy.
+    const sushiConfigPath = path.join(targetDir, 'sushi-config.yaml');
+    const hasConfig = await fileExists(sushiConfigPath);
+    if (hasConfig) {
+      throw new Error(`Target directory already exists: ${targetDir}`);
+    }
+    console.log(`  Removing incomplete target directory from failed previous run: ${targetDir}`);
+    await fsp.rm(targetDir, { recursive: true, force: true });
   }
   console.log(`  Copying ${sourceDir} to ${targetDir}...`);
-  await fsp.cp(sourceDir, targetDir, { recursive: true });
+  try {
+    await fsp.cp(sourceDir, targetDir, { recursive: true });
+  } catch (error) {
+    // Clean up any partial copy so the next run can retry cleanly.
+    await fsp.rm(targetDir, { recursive: true, force: true }).catch(() => null);
+    throw error;
+  }
   return targetDir;
 }
 
