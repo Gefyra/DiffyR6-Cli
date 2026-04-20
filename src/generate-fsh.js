@@ -42,6 +42,7 @@ export async function generateFshFromPackage(packageSpec, outputDir) {
     console.log('  GoFSH finished successfully');
     
     await updateSushiConfigDependencies(path.join(extractDir, 'package'), outputDir);
+    await commentInvalidExtensionValueSlicing(outputDir);
     await runSushiWithDuplicateSliceFix(outputDir);
   } catch (err) {
     throw new Error(`Failed to generate FSH from package: ${err.message}`);
@@ -274,6 +275,199 @@ async function runSushiWithDuplicateSliceFix(outputDir) {
   if (rerun.exitCode !== 0) {
     console.warn('  SUSHI still reports errors after auto-fix');
   }
+}
+
+async function commentInvalidExtensionValueSlicing(outputDir) {
+  const fshFiles = await collectFshFiles(outputDir);
+  let patchedFiles = 0;
+
+  for (const filePath of fshFiles) {
+    const patched = await commentInvalidExtensionValueSlicingInFile(filePath);
+    if (patched) {
+      patchedFiles += 1;
+    }
+  }
+
+  if (patchedFiles > 0) {
+    console.log(
+      `  Commented invalid extension value[x] slicing in ${patchedFiles} FSH file(s)`
+    );
+  }
+}
+
+async function collectFshFiles(rootDir) {
+  const results = [];
+
+  async function walk(current) {
+    const entries = await fsp.readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.fsh')) {
+        results.push(entryPath);
+      }
+    }
+  }
+
+  await walk(rootDir);
+  return results;
+}
+
+async function commentInvalidExtensionValueSlicingInFile(filePath) {
+  const original = await fsp.readFile(filePath, 'utf8');
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r?\n/);
+  const updatedLines = [];
+  let changed = false;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!isInvalidExtensionValueSlicingLine(line)) {
+      updatedLines.push(line);
+      i += 1;
+      continue;
+    }
+
+    const block = [];
+    while (i < lines.length && isInvalidExtensionValueSlicingLine(lines[i])) {
+      block.push(lines[i]);
+      i += 1;
+    }
+
+    const previousLine = updatedLines[updatedLines.length - 1] || '';
+    if (!isInvalidExtensionValueSlicingComment(previousLine)) {
+      const indent = block[0].match(/^\s*/)?.[0] || '';
+      updatedLines.push(
+        `${indent}// Invalid per comparer errors: slicing on choice elements is commented out.`
+      );
+    }
+
+    for (const blockLine of block) {
+      if (blockLine.trimStart().startsWith('//')) {
+        updatedLines.push(blockLine);
+      } else {
+        updatedLines.push(`${blockLine.match(/^\s*/)?.[0] || ''}// ${blockLine.trimStart()}`);
+        changed = true;
+      }
+    }
+
+    const followUp = collectChoiceSlicingFollowUp(lines, i);
+    for (const followLine of followUp.keptLines) {
+      updatedLines.push(followLine);
+    }
+    for (const followLine of followUp.commentedLines) {
+      updatedLines.push(`${followLine.match(/^\s*/)?.[0] || ''}// ${followLine.trimStart()}`);
+      changed = true;
+    }
+    i = followUp.nextIndex;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  const updated = updatedLines.join(newline);
+  if (updated !== original) {
+    await fsp.writeFile(filePath, updated, 'utf8');
+  }
+  return true;
+}
+
+function isInvalidExtensionValueSlicingLine(line) {
+  if (!line || line.trimStart().startsWith('//')) {
+    return false;
+  }
+  return /^\s*\*\s+\S+\[x\]\s+\^slicing\./i.test(line);
+}
+
+function isInvalidExtensionValueSlicingComment(line) {
+  return (
+    typeof line === 'string' &&
+    /Invalid per comparer errors: slicing on choice elements is commented out\./.test(line)
+  );
+}
+
+function extractChoiceSliceFollowUpRoot(line) {
+  if (!line || line.trimStart().startsWith('//')) {
+    return null;
+  }
+  const sliceNameMatch = line.match(/^\s*\*\s+(\S+)\s+\^sliceName\s*=/i);
+  if (sliceNameMatch) {
+    return sliceNameMatch[1];
+  }
+  const onlyMatch = line.match(/^\s*\*\s+(value[A-Z]\S*)\s+only\s+\S+/i);
+  if (onlyMatch) {
+    return onlyMatch[1];
+  }
+  return null;
+}
+
+function isChoiceSliceCardinalityLine(line, sliceRoot) {
+  if (!line || !sliceRoot || line.trimStart().startsWith('//')) {
+    return false;
+  }
+  const escapedRoot = escapeRegExp(sliceRoot);
+  return new RegExp(`^\\s*\\*\\s+${escapedRoot}\\s+\\d+\\.\\.(?:\\d+|\\*)\\s*$`, 'i').test(line);
+}
+
+function collectChoiceSlicingFollowUp(lines, startIndex) {
+  const pendingLines = [];
+  const commentedLines = [];
+  let inferredSliceRoot = null;
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line || line.trimStart().startsWith('//')) {
+      break;
+    }
+
+    const explicitRoot = extractChoiceSliceFollowUpRoot(line);
+    if (explicitRoot) {
+      if (!inferredSliceRoot) {
+        inferredSliceRoot = explicitRoot;
+      }
+      if (explicitRoot !== inferredSliceRoot) {
+        break;
+      }
+      commentedLines.push(line);
+      index += 1;
+      continue;
+    }
+
+    if (!inferredSliceRoot) {
+      const pendingRoot = extractChoiceSliceCardinalityRoot(line);
+      if (!pendingRoot) {
+        break;
+      }
+      pendingLines.push(line);
+      index += 1;
+      continue;
+    }
+
+    if (!isChoiceSliceCardinalityLine(line, inferredSliceRoot)) {
+      break;
+    }
+    pendingLines.push(line);
+    index += 1;
+  }
+
+  const keptLines = inferredSliceRoot ? pendingLines : [];
+  return {
+    keptLines,
+    commentedLines,
+    nextIndex: inferredSliceRoot ? index : startIndex,
+  };
+}
+
+function extractChoiceSliceCardinalityRoot(line) {
+  if (!line || line.trimStart().startsWith('//')) {
+    return null;
+  }
+  const match = line.match(/^\s*\*\s+(value[A-Z]\S*)\s+\d+\.\.(?:\d+|\*)\s*$/i);
+  return match ? match[1] : null;
 }
 
 async function runSushiOnce(executable, args, cwd, logFileName) {

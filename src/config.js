@@ -33,28 +33,34 @@ export const DEFAULT_CONFIG = {
  * Loads and validates a configuration file
  */
 export async function loadConfig(configPath) {
-  const raw = await fsp.readFile(configPath, 'utf8');
+  const absoluteConfigPath = path.resolve(configPath);
+  const configDir = path.dirname(absoluteConfigPath);
+
+  const raw = await fsp.readFile(absoluteConfigPath, 'utf8');
   let config = JSON.parse(raw);
   const originalVersion = config.configVersion;
-  
+
   // Migrate config if needed
   config = migrateConfig(config);
-  
+
   // Write back to file if migration occurred
   if (config.configVersion !== originalVersion) {
-    await fsp.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+    await fsp.writeFile(absoluteConfigPath, JSON.stringify(config, null, 2), 'utf8');
     console.log(`  Config file updated to version ${config.configVersion}`);
   }
-  
+
   // Validate config version
   validateConfigVersion(config);
-  
+
   // Merge with defaults
   const merged = { ...DEFAULT_CONFIG, ...config };
-  
+
   // Validate required fields
   validateConfig(merged);
-  
+
+  // Attach config directory so callers can resolve relative paths against it
+  merged._configDir = configDir;
+
   return merged;
 }
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Note on versioning:** Minor bugfixes and patches that don't introduce new features are released as patch versions (e.g., 1.1.1, 1.1.2) and are not explicitly listed in this changelog. Only feature releases (minor versions) and breaking changes (major versions) are documented here.
 
+## [Unreleased]
+
+### Fixed
+- All relative paths in the config file (`resourcesDir`, `resourcesR6Dir`, `compareDir`, `outputDir`, `workdir`, `rulesConfigPath`, `validatorJarPath`) are now resolved relative to the config file's location instead of the current working directory. This means `fhir-r6-migrate --config ./igs/example/migrate-config.json` now works correctly regardless of where the command is executed.
+
 ## [1.2.*] - 2026-03-28
 
 ### Added
@@ -28,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Broken runner step logging around report generation
 - Missing config migration path for adding `skipSearchParameterReport` to existing configurations
 - Missing SearchParameter report inclusion in ZIP exports when reusing existing report files
+- GoFSH post-processing now comments out invalid `^slicing` rules on choice elements (for example `value[x]`) because they are not valid due to comparer errors
 
 ## [1.1.*] - 2026-01-28
 

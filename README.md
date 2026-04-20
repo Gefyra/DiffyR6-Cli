@@ -107,17 +107,24 @@ fhir-r6-migrate --version
 fhir-r6-migrate --help
 ```
 
+**Paths are always relative to the config file**
+
+All relative paths in the configuration (`resourcesDir`, `resourcesR6Dir`, `compareDir`, `outputDir`, `workdir`, `rulesConfigPath`, `validatorJarPath`) are resolved relative to the config file's location — not the directory from which the command is run. This means you can invoke the tool from anywhere:
+
+```bash
+# Works from any directory — paths are resolved relative to ./igs/example/
+fhir-r6-migrate --config ./igs/example/migrate-config.json
+cd /some/other/dir && fhir-r6-migrate --config /absolute/path/to/migrate-config.json
+```
+
 **Managing Multiple IGs in Parallel**
 
-The `--config` parameter enables you to manage multiple implementation guides simultaneously. To do this, create separate config files for each IG and adjust the `workdir` field to point to different directories. All other paths (like `resourcesDir`, `resourcesR6Dir`, `compareDir`, and `outputDir`) can remain the same across configs, as they will be resolved relative to each specific `workdir`.
+The `--config` parameter enables you to manage multiple implementation guides simultaneously. Place a separate config file inside each IG directory and use relative paths within it. All paths resolve relative to that config file, so configs stay portable:
 
-Example:
 ```bash
-# IG 1 configuration (config-basisprofil.json with "workdir": "./igs/basisprofil")
-fhir-r6-migrate --config config-basisprofil.json
-
-# IG 2 configuration (config-medikation.json with "workdir": "./igs/medikation") 
-fhir-r6-migrate --config config-medikation.json
+# Each config file lives next to its IG — no workdir needed
+fhir-r6-migrate --config ./igs/basisprofil/migrate-config.json
+fhir-r6-migrate --config ./igs/medikation/migrate-config.json
 ```
 
 ### Programmatic Usage
@@ -172,7 +179,7 @@ console.log('Findings:', result.findingsCount);
 | `enableGoFSH` | boolean | `true` | Enable GoFSH package download & FSH generation |
 | `rulesConfigPath` | string | `null` | Path to custom rules config (uses default if null) |
 | `validatorJarPath` | string | `null` | Path to validator_cli.jar (auto-downloads latest from GitHub if null) |
-| `workdir` | string | `null` | Working directory (uses current dir if null) |
+| `workdir` | string | `null` | Working directory base for all paths (defaults to the config file's directory if null) |
 | `compareMode` | string | `"incremental"` | Comparison mode: `"incremental"` or `"full"` |
 | `exportZip` | boolean | `true` | Create a ZIP export containing compare HTML, markdown report, and run config |
 

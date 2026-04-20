@@ -20,16 +20,19 @@ export async function runMigration(config) {
   // Check for updates
   await checkForUpdates();
   
-  // Resolve paths
-  const workdir = config.workdir ? path.resolve(config.workdir) : process.cwd();
+  // Resolve paths relative to config file location (or process.cwd() for programmatic use)
+  const configBase = config._configDir || process.cwd();
+  const workdir = config.workdir ? path.resolve(configBase, config.workdir) : configBase;
   const resourcesDir = path.resolve(workdir, config.resourcesDir);
   const resourcesR6Dir = path.resolve(workdir, config.resourcesR6Dir);
   const compareDir = path.resolve(workdir, config.compareDir);
   const outputDir = path.resolve(workdir, config.outputDir);
-  
+  const rulesConfigPath = config.rulesConfigPath ? path.resolve(configBase, config.rulesConfigPath) : null;
+  const validatorJarPath = config.validatorJarPath ? path.resolve(configBase, config.validatorJarPath) : null;
+
   // Ensure output directory exists
   await fsp.mkdir(outputDir, { recursive: true });
-  
+
   const context = {
     config,
     workdir,
@@ -37,6 +40,8 @@ export async function runMigration(config) {
     resourcesR6Dir,
     compareDir,
     outputDir,
+    rulesConfigPath,
+    validatorJarPath,
     steps: [],
   };
 
@@ -231,7 +236,7 @@ async function runProfileComparison(context) {
   await fsp.mkdir(compareDir, { recursive: true });
   
   const options = {
-    jarPath: config.validatorJarPath || null,
+    jarPath: context.validatorJarPath || null,
     fhirVersion: '4.0',
     debug: config.debug || false,
     workingDirectory: workdir,
@@ -352,10 +357,10 @@ async function listExistingCompareFiles(compareDir) {
  * Generate markdown report with rules evaluation
  */
 async function generateReport(context, compareResults, removedResources = []) {
-  const { compareDir, outputDir, config } = context;
-  
+  const { compareDir, outputDir, config, rulesConfigPath } = context;
+
   // Load rules
-  const rules = await loadRules(config.rulesConfigPath);
+  const rules = await loadRules(rulesConfigPath);
   
   // Read all HTML files from compare directory
   const htmlFiles = await readCompareHtmlFiles(compareDir);
