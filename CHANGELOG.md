@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Note on versioning:** Minor bugfixes and patches that don't introduce new features are released as patch versions (e.g., 1.1.1, 1.1.2) and are not explicitly listed in this changelog. Only feature releases (minor versions) and breaking changes (major versions) are documented here.
 
-## [Unreleased]
+## [1.2.2] - 2026-04-20
 
 ### Fixed
 - All relative paths in the config file (`resourcesDir`, `resourcesR6Dir`, `compareDir`, `outputDir`, `workdir`, `rulesConfigPath`, `validatorJarPath`) are now resolved relative to the config file's location instead of the current working directory. This means `fhir-r6-migrate --config ./igs/example/migrate-config.json` now works correctly regardless of where the command is executed.
 - Step 2 (Upgrade to R6) now recovers from a previously interrupted copy: if the target directory exists but contains no `sushi-config.yaml` (indicating a partial copy from a failed prior run), it is automatically deleted before retrying. Additionally, if the copy itself fails, the partial directory is cleaned up immediately so the next run can retry cleanly.
+- Step 2 (Upgrade to R6) now copies only whitelisted files (`*.fsh`, `sushi-config.yaml/yml`) from the source directory into the R6 workspace, preserving the directory structure. All other files (e.g. build artifacts, reports, non-FHIR resources) are left in place and not carried over.
 
-## [1.2.*] - 2026-03-28
+## [1.2.1] - 2026-03-28
 
 ### Added
 - SearchParameter analysis for CapabilityStatements to detect references to search parameters removed from R6

@@ -58,15 +58,38 @@ async function createR6Workspace(sourceDir) {
     console.log(`  Removing incomplete target directory from failed previous run: ${targetDir}`);
     await fsp.rm(targetDir, { recursive: true, force: true });
   }
-  console.log(`  Copying ${sourceDir} to ${targetDir}...`);
+  console.log(`  Copying FSH files and sushi config from ${sourceDir} to ${targetDir}...`);
   try {
-    await fsp.cp(sourceDir, targetDir, { recursive: true });
+    await copyWhitelisted(sourceDir, targetDir);
   } catch (error) {
     // Clean up any partial copy so the next run can retry cleanly.
     await fsp.rm(targetDir, { recursive: true, force: true }).catch(() => null);
     throw error;
   }
   return targetDir;
+}
+
+/**
+ * Copies only whitelisted files (*.fsh and sushi-config.yaml/yml) from sourceDir to targetDir,
+ * preserving the directory structure. Files not on the whitelist are ignored.
+ */
+async function copyWhitelisted(sourceDir, targetDir) {
+  const entries = await fsp.readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      await copyWhitelisted(sourcePath, targetPath);
+    } else if (entry.isFile() && isWhitelisted(entry.name)) {
+      await fsp.mkdir(targetDir, { recursive: true });
+      await fsp.copyFile(sourcePath, targetPath);
+    }
+  }
+}
+
+function isWhitelisted(filename) {
+  const lower = filename.toLowerCase();
+  return lower.endsWith('.fsh') || lower === 'sushi-config.yaml' || lower === 'sushi-config.yml';
 }
 
 function deriveR6Path(sourceDir) {
