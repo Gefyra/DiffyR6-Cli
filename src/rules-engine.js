@@ -628,7 +628,7 @@ function compareContains(left, right, caseSensitive) {
 function normalizeTypeName(name) {
   return String(name)
     .trim()
-    .replace(/[- ]?r[46]$/i, '')
+    .replace(/[- ]?r[46](?=\(|$)/i, '')
     .toLowerCase();
 }
 
