@@ -298,8 +298,12 @@ async function runSushi(executable, targetDir) {
   try {
     const parts = executable.trim().split(/\s+/);
     const command = parts[0];
-    const args = [...parts.slice(1), targetDir];
-    
+    // On Windows, spawn uses shell:true which concatenates args into a single string
+    // passed to cmd.exe. Paths with spaces must be quoted so cmd.exe treats them
+    // as a single argument.
+    const dirArg = process.platform === 'win32' ? `"${targetDir}"` : targetDir;
+    const args = [...parts.slice(1), dirArg];
+
     return await spawnProcess(command, args, process.cwd());
   } finally {
     animator.stop();
