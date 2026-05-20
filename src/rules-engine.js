@@ -576,6 +576,9 @@ function evaluateCondition(condition, row, lookup) {
   if (operator === 'contains') {
     return compareContains(cellValue, expected, caseSensitive);
   }
+  if (operator === '!contains' || operator === 'notcontains' || operator === 'not-contains') {
+    return !compareContains(cellValue, expected, caseSensitive);
+  }
   if (operator === 'typesubsetof') {
     return typeListIsSubset(cellValue, expected);
   }
