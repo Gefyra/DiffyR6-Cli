@@ -73,33 +73,45 @@ export async function compareProfiles(r4Dir, r6Dir, destDir, options = {}) {
   if (validIgPaths.length === 0) {
     console.warn('Warning: No fsh-generated/resources directories found for IG paths');
   }
-  
+
+  // Pre-process profiles: inject missing slicing definitions into differentials
+  // so the validator's DefinitionNavigator can find them in child profiles.
+  const fixedIgDir = path.join(destDir, '.profiles-fixed');
+  let igPathsForComparison = validIgPaths;
+  if (validIgPaths.length > 0) {
+    igPathsForComparison = await prepareFixedProfiles(validIgPaths, fixedIgDir);
+  }
+
   const existingFiles = await collectExistingComparisonFiles(destDir);
 
-  for (let i = 0; i < pairs.length; i += 1) {
-    const pair = pairs[i];
-    const label = `[${i + 1}/${pairs.length}] ${pair.displayName}`;
-    console.log(`\n${label}`);
-    const comparisonFile = buildComparisonFileName(pair.left.url, pair.right.url);
-    if (comparisonFile && existingFiles.has(comparisonFile)) {
-      console.log(`  Skipping ${pair.displayName} (${comparisonFile} exists)`);
-      continue;
+  try {
+    for (let i = 0; i < pairs.length; i += 1) {
+      const pair = pairs[i];
+      const label = `[${i + 1}/${pairs.length}] ${pair.displayName}`;
+      console.log(`\n${label}`);
+      const comparisonFile = buildComparisonFileName(pair.left.url, pair.right.url);
+      if (comparisonFile && existingFiles.has(comparisonFile)) {
+        console.log(`  Skipping ${pair.displayName} (${comparisonFile} exists)`);
+        continue;
+      }
+      await runValidatorCompare({
+        jarPath: resolvedJarPath,
+        destDir,
+        version: fhirVersion,
+        leftUrl: pair.left.url,
+        rightUrl: pair.right.url,
+        workingDirectory,
+        spinnerLabel: `Comparing ${pair.displayName}...`,
+        igPaths: igPathsForComparison,
+        debug,
+      });
+      if (comparisonFile) {
+        existingFiles.add(comparisonFile);
+      }
+      console.log(`  Done: ${pair.displayName}`);
     }
-    await runValidatorCompare({
-      jarPath: resolvedJarPath,
-      destDir,
-      version: fhirVersion,
-      leftUrl: pair.left.url,
-      rightUrl: pair.right.url,
-      workingDirectory,
-      spinnerLabel: `Comparing ${pair.displayName}...`,
-      igPaths: validIgPaths,
-      debug,
-    });
-    if (comparisonFile) {
-      existingFiles.add(comparisonFile);
-    }
-    console.log(`  Done: ${pair.displayName}`);
+  } finally {
+    await fsp.rm(fixedIgDir, { recursive: true, force: true }).catch(() => {});
   }
 
   return {
@@ -336,6 +348,7 @@ async function runValidatorCompare({
 }) {
   const args = [
     '-Djava.awt.headless=true',
+    '-Xss32m',
     '-jar',
     jarPath,
     '-compare',
@@ -371,6 +384,90 @@ async function runValidatorCompare({
       animator.stop();
     }
   }
+}
+
+/**
+ * Copies all profiles from igPaths to tempDir, injecting missing slicing
+ * definitions into differentials so the validator can resolve them.
+ */
+async function prepareFixedProfiles(igPaths, tempDir) {
+  await fsp.mkdir(tempDir, { recursive: true });
+
+  let totalFiles = 0;
+  let fixedCount = 0;
+  let totalInjections = 0;
+
+  for (const igPath of igPaths) {
+    const files = await collectJsonFiles(igPath);
+    for (const filePath of files) {
+      let data;
+      try {
+        data = JSON.parse(await fsp.readFile(filePath, 'utf8'));
+      } catch {
+        continue;
+      }
+
+      totalFiles += 1;
+
+      if (data.resourceType === 'StructureDefinition' && data.differential && data.snapshot) {
+        const fixed = fixDifferentialSlicing(
+          data.differential.element || [],
+          data.snapshot.element || []
+        );
+        if (fixed.injected > 0) {
+          data = { ...data, differential: { ...data.differential, element: fixed.elements } };
+          fixedCount += 1;
+          totalInjections += fixed.injected;
+        }
+      }
+
+      const fileName = path.basename(filePath);
+      await fsp.writeFile(path.join(tempDir, fileName), JSON.stringify(data), 'utf8');
+    }
+  }
+
+  console.log(`  Differential fix: ${fixedCount}/${totalFiles} profiles patched (${totalInjections} slicing entries injected)`);
+  return [tempDir];
+}
+
+/**
+ * Ensures every sliced element in a differential has a preceding parent element
+ * with a slicing definition. Missing ones are injected from the snapshot.
+ * Returns { elements, injected } where injected is the count of added entries.
+ */
+function fixDifferentialSlicing(diffElements, snapElements) {
+  // Build map: path → first snapshot element that carries slicing
+  const snapSlicingByPath = new Map();
+  for (const el of snapElements) {
+    if (el.slicing && !snapSlicingByPath.has(el.path)) {
+      snapSlicingByPath.set(el.path, el);
+    }
+  }
+
+  const result = [];
+  const injectedPaths = new Set();
+  let injected = 0;
+
+  for (const el of diffElements) {
+    if (el.sliceName) {
+      const parentPath = el.path;
+      if (!injectedPaths.has(parentPath)) {
+        const prevEl = result[result.length - 1];
+        const prevCoversSlicing = prevEl && prevEl.path === parentPath && prevEl.slicing;
+        if (!prevCoversSlicing) {
+          const snapEl = snapSlicingByPath.get(parentPath);
+          if (snapEl) {
+            result.push({ id: snapEl.id, path: snapEl.path, slicing: snapEl.slicing });
+            injected += 1;
+          }
+        }
+        injectedPaths.add(parentPath);
+      }
+    }
+    result.push(el);
+  }
+
+  return { elements: result, injected };
 }
 
 function printProcessOutput({ stdout, stderr }, leftUrl, rightUrl) {
