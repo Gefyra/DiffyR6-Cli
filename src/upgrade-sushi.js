@@ -212,24 +212,22 @@ async function applyProfileRenames(files, renameMap) {
     }
     
     for (const [oldName, newName] of renameMap.entries()) {
-      const oldIdPart = camelCaseToKebabCase(oldName);
-      const newIdPart = camelCaseToKebabCase(newName);
-      
-      const urlPattern = new RegExp(
-        `(\\^url\\s*=\\s*["\'])([^"']*\\/)${escapeRegExp(oldIdPart)}(["\'])`,
+      const oldFhirId = oldName.replace(/_/g, '-');
+      const newFhirId = newName.replace(/_/g, '-');
+
+      // Top-level FSH keyword: Id: KBV-PR-Base-Patient
+      const idKeywordPattern = new RegExp(
+        `^(Id:\\s*)${escapeRegExp(oldFhirId)}(\\s*)$`,
+        'gm'
+      );
+      updated = updated.replace(idKeywordPattern, `$1${newFhirId}$2`);
+
+      // Metadata rule: * ^id = "KBV-PR-Base-Patient"
+      const idRulePattern = new RegExp(
+        `(\\^id\\s*=\\s*["'])${escapeRegExp(oldFhirId)}(["'])`,
         'g'
       );
-      updated = updated.replace(urlPattern, (_, prefix, urlPrefix, suffix) => {
-        return `${prefix}${urlPrefix}${newIdPart}${suffix}`;
-      });
-      
-      const idPattern = new RegExp(
-        `(\\^id\\s*=\\s*["\'])${escapeRegExp(oldIdPart)}(["\'])`,
-        'g'
-      );
-      updated = updated.replace(idPattern, (_, prefix, suffix) => {
-        return `${prefix}${newIdPart}${suffix}`;
-      });
+      updated = updated.replace(idRulePattern, `$1${newFhirId}$2`);
     }
     
     if (updated !== original) {

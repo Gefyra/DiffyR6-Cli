@@ -4,9 +4,12 @@ import path from 'path';
 import os from 'os';
 import https from 'https';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 import { fileExists } from './utils/fs.js';
 import { spawnProcess, createAnimator } from './utils/process.js';
 import { parseSushiLog } from './utils/sushi-log.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const IGNORED_PACKAGE_DEPENDENCIES = new Set(['gofsh', 'sushi']);
 
@@ -51,6 +54,18 @@ export async function generateFshFromPackage(packageSpec, outputDir) {
   }
 }
 
+function nodeModulesBinDirsUpFrom(startDir) {
+  const dirs = [];
+  let current = startDir;
+  for (;;) {
+    dirs.push(path.join(current, 'node_modules', '.bin'));
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return dirs;
+}
+
 async function resolveGofshExecutable(overridePath) {
   if (overridePath) {
     return overridePath;
@@ -59,12 +74,13 @@ async function resolveGofshExecutable(overridePath) {
     process.platform === 'win32'
       ? ['gofsh.cmd', 'gofsh.exe', 'gofsh.bat', 'gofsh']
       : ['gofsh'];
-  
+
   const searchRoots = [
     process.cwd(),
-    path.resolve(process.cwd(), 'node_modules', '.bin'),
+    ...nodeModulesBinDirsUpFrom(process.cwd()),
+    ...nodeModulesBinDirsUpFrom(__dirname),
   ];
-  
+
   for (const root of searchRoots) {
     for (const name of candidateNames) {
       const candidate = path.join(root, name);

@@ -332,7 +332,7 @@ function buildComparisonFileName(leftUrl, rightUrl) {
 }
 
 function sanitizeSegment(value) {
-  return (value || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return (value || '').replace(/[^A-Za-z0-9_-]/g, '').replace(/_/g, '-');
 }
 
 async function runValidatorCompare({
@@ -376,8 +376,13 @@ async function runValidatorCompare({
   try {
     const spawnOptions = debug ? { stdio: 'inherit' } : {};
     const result = await spawnProcess('java', args, workingDirectory, spawnOptions);
-    if (debug && result) {
-      // Output already shown via inherit, no need to print again
+    if (!debug && result && result.exitCode !== 0) {
+      const details = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+      console.warn(`  ⚠ Validator exited with code ${result.exitCode} for ${rightUrl}`);
+      if (details) {
+        const preview = details.split('\n').slice(0, 10).join('\n');
+        console.warn(`  Validator output:\n${preview}`);
+      }
     }
   } finally {
     if (animator) {
@@ -389,6 +394,8 @@ async function runValidatorCompare({
 /**
  * Copies all profiles from igPaths to tempDir, injecting missing slicing
  * definitions into differentials so the validator can resolve them.
+ * Each source igPath gets its own subdirectory to avoid filename collisions
+ * between R4 and R6 profiles that share the same filename.
  */
 async function prepareFixedProfiles(igPaths, tempDir) {
   await fsp.mkdir(tempDir, { recursive: true });
@@ -396,8 +403,13 @@ async function prepareFixedProfiles(igPaths, tempDir) {
   let totalFiles = 0;
   let fixedCount = 0;
   let totalInjections = 0;
+  const outputDirs = [];
 
-  for (const igPath of igPaths) {
+  for (let i = 0; i < igPaths.length; i++) {
+    const igPath = igPaths[i];
+    const subDir = path.join(tempDir, String(i));
+    await fsp.mkdir(subDir, { recursive: true });
+
     const files = await collectJsonFiles(igPath);
     for (const filePath of files) {
       let data;
@@ -410,24 +422,30 @@ async function prepareFixedProfiles(igPaths, tempDir) {
       totalFiles += 1;
 
       if (data.resourceType === 'StructureDefinition' && data.differential && data.snapshot) {
-        const fixed = fixDifferentialSlicing(
-          data.differential.element || [],
-          data.snapshot.element || []
-        );
-        if (fixed.injected > 0) {
-          data = { ...data, differential: { ...data.differential, element: fixed.elements } };
+        const snapElements = data.snapshot.element || [];
+        const fixed = fixDifferentialSlicing(data.differential.element || [], snapElements);
+        const cleanedSnap = cleanSnapshotOrphanSlices(snapElements);
+        const snapChanged = cleanedSnap.length !== snapElements.length;
+        if (fixed.injected > 0 || snapChanged) {
+          data = {
+            ...data,
+            differential: { ...data.differential, element: fixed.elements },
+            snapshot: { ...data.snapshot, element: cleanedSnap },
+          };
           fixedCount += 1;
           totalInjections += fixed.injected;
         }
       }
 
       const fileName = path.basename(filePath);
-      await fsp.writeFile(path.join(tempDir, fileName), JSON.stringify(data), 'utf8');
+      await fsp.writeFile(path.join(subDir, fileName), JSON.stringify(data), 'utf8');
     }
+
+    outputDirs.push(subDir);
   }
 
   console.log(`  Differential fix: ${fixedCount}/${totalFiles} profiles patched (${totalInjections} slicing entries injected)`);
-  return [tempDir];
+  return outputDirs;
 }
 
 /**
@@ -446,11 +464,15 @@ function fixDifferentialSlicing(diffElements, snapElements) {
 
   const result = [];
   const injectedPaths = new Set();
+  const droppedPaths = new Set();
   let injected = 0;
 
   for (const el of diffElements) {
     if (el.sliceName) {
       const parentPath = el.path;
+      if (droppedPaths.has(parentPath)) {
+        continue;
+      }
       if (!injectedPaths.has(parentPath)) {
         const prevEl = result[result.length - 1];
         const prevCoversSlicing = prevEl && prevEl.path === parentPath && prevEl.slicing;
@@ -459,6 +481,9 @@ function fixDifferentialSlicing(diffElements, snapElements) {
           if (snapEl) {
             result.push({ id: snapEl.id, path: snapEl.path, slicing: snapEl.slicing });
             injected += 1;
+          } else {
+            droppedPaths.add(parentPath);
+            continue;
           }
         }
         injectedPaths.add(parentPath);
@@ -468,6 +493,21 @@ function fixDifferentialSlicing(diffElements, snapElements) {
   }
 
   return { elements: result, injected };
+}
+
+/**
+ * Removes slice elements from the snapshot whose path has no associated
+ * slicing definition. The validator's DefinitionNavigator throws when it
+ * encounters a sliceName without a preceding slicing parent in the snapshot.
+ */
+function cleanSnapshotOrphanSlices(snapElements) {
+  const pathsWithSlicing = new Set();
+  for (const el of snapElements) {
+    if (el.slicing) {
+      pathsWithSlicing.add(el.path);
+    }
+  }
+  return snapElements.filter(el => !el.sliceName || pathsWithSlicing.has(el.path));
 }
 
 function printProcessOutput({ stdout, stderr }, leftUrl, rightUrl) {
