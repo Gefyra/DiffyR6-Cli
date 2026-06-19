@@ -9,6 +9,11 @@ const SOURCE_VERSION = '4.0.1';
 const TARGET_VERSION = '6.0.0-ballot3';
 const MAX_ITERATIONS = 10;
 const SNOMED_CT_ERROR_TEXT = 'Resolved value "SNOMED_CT" is not a valid URI';
+// R4 core (and R4B core) must be removed from the R6 config: SUSHI auto-loads the
+// core package matching `fhirVersion`, so leaving the explicit R4 core dependency in
+// place makes base-type/Extension resolution ambiguous and a subset of artifacts
+// (notably plain Extensions and core-derived datatypes) silently inherit R4.
+const R4_CORE_DEPENDENCY_REGEX = /^\s+hl7\.fhir\.r4b?\.core\s*:.*$/i;
 
 /**
  * Upgrades a SUSHI project to FHIR R6
@@ -27,6 +32,10 @@ export async function upgradeSushiToR6(sourceDir, sushiExecutable = 'sushi -s') 
       const updated = await updateFhirVersion(configPath, SOURCE_VERSION, TARGET_VERSION);
       if (updated) {
         console.log(`  Updated ${path.basename(configPath)} to ${TARGET_VERSION}`);
+      }
+      const removedR4Core = await removeR4CoreDependency(configPath);
+      if (removedR4Core) {
+        console.log(`  Removed R4 core dependency from ${path.basename(configPath)} (R6 core is auto-loaded)`);
       }
     })
   );
@@ -122,6 +131,22 @@ async function updateFhirVersion(filePath, fromVersion, toVersion) {
     return false;
   }
   await fsp.writeFile(filePath, updated, 'utf8');
+  return true;
+}
+
+/**
+ * Removes the explicit R4 (or R4B) core dependency from a sushi-config.yaml.
+ * Returns true if a line was removed.
+ */
+async function removeR4CoreDependency(filePath) {
+  const original = await fsp.readFile(filePath, 'utf8');
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r?\n/);
+  const filtered = lines.filter((line) => !R4_CORE_DEPENDENCY_REGEX.test(line));
+  if (filtered.length === lines.length) {
+    return false;
+  }
+  await fsp.writeFile(filePath, filtered.join(newline), 'utf8');
   return true;
 }
 
