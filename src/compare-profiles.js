@@ -2,6 +2,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { createAnimator, spawnProcess } from './utils/process.js';
 import { ensureValidator } from './utils/validator.js';
+import { readParentHelperCanonicals } from './resolve-parents.js';
 
 const MAGNIFIER_FRAMES = [
   '🔎     ~~~~~',
@@ -35,12 +36,22 @@ export async function compareProfiles(r4Dir, r6Dir, destDir, options = {}) {
   
   await fsp.mkdir(destDir, { recursive: true });
 
-  const r4Defs = (await collectStructureDefinitions(r4Dir)).sort((a, b) =>
-    a.url.localeCompare(b.url)
+  // Parent-chain helpers are scaffolding for R6 conversion, not the package's own
+  // profiles. Exclude them from the comparison so they never produce report files.
+  const helperCanonicals = new Set(
+    (await readParentHelperCanonicals(r6Dir)).map((url) => url.toLowerCase())
   );
-  const r6Defs = (await collectStructureDefinitions(r6Dir)).sort((a, b) =>
-    a.url.localeCompare(b.url)
+  const helperSegments = new Set(
+    [...helperCanonicals].map((url) => sanitizeSegment(extractLastSegment(url)).toLowerCase())
   );
+  const isHelper = (def) => helperCanonicals.has((def.url || '').toLowerCase());
+
+  const r4Defs = (await collectStructureDefinitions(r4Dir))
+    .filter((def) => !isHelper(def))
+    .sort((a, b) => a.url.localeCompare(b.url));
+  const r6Defs = (await collectStructureDefinitions(r6Dir))
+    .filter((def) => !isHelper(def))
+    .sort((a, b) => a.url.localeCompare(b.url));
 
   if (r4Defs.length === 0) {
     throw new Error(`No StructureDefinitions found in ${r4Dir}`);
@@ -114,6 +125,11 @@ export async function compareProfiles(r4Dir, r6Dir, destDir, options = {}) {
     await fsp.rm(fixedIgDir, { recursive: true, force: true }).catch(() => {});
   }
 
+  // The validator can recursively emit comparison artifacts for the shared-canonical
+  // parents (named after the helper) and generic `xx-` entries. Remove them so the
+  // compare output contains only the package's own profile comparisons.
+  await removeHelperArtifacts(destDir, helperSegments);
+
   return {
     comparedCount: pairs.length,
     skippedCount: pairs.filter((p) => {
@@ -121,6 +137,33 @@ export async function compareProfiles(r4Dir, r6Dir, destDir, options = {}) {
       return fileName && existingFiles.has(fileName);
     }).length,
   };
+}
+
+/**
+ * Removes comparison artifacts that belong to parent-chain helpers (matched by their
+ * URL segment) and any generic `xx-` files the validator may emit for them.
+ */
+async function removeHelperArtifacts(destDir, helperSegments) {
+  // Only active when parent-chain helpers were materialised; leaves the output of
+  // projects without external R4 parents untouched.
+  if (helperSegments.size === 0) {
+    return;
+  }
+  const entries = await fsp.readdir(destDir).catch(() => []);
+  let removed = 0;
+  for (const name of entries) {
+    const lower = name.toLowerCase();
+    const isXx = /^xx-.+\..+$/.test(lower);
+    const matchesHelper =
+      helperSegments.size > 0 && [...helperSegments].some((segment) => lower.includes(segment));
+    if (isXx || matchesHelper) {
+      await fsp.rm(path.join(destDir, name), { force: true }).catch(() => {});
+      removed += 1;
+    }
+  }
+  if (removed > 0) {
+    console.log(`  Removed ${removed} helper/generic comparison artifact(s) from compare output`);
+  }
 }
 
 async function ensureDirectory(dirPath, label) {

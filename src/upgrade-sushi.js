@@ -4,6 +4,7 @@ import os from 'os';
 import { createAnimator, spawnProcess } from './utils/process.js';
 import { fileExists, pathExists } from './utils/fs.js';
 import { parseSushiLog } from './utils/sushi-log.js';
+import { resolveParentChainToFsh } from './resolve-parents.js';
 
 const SOURCE_VERSION = '4.0.1';
 const TARGET_VERSION = '6.0.0-ballot3';
@@ -41,8 +42,14 @@ export async function upgradeSushiToR6(sourceDir, sushiExecutable = 'sushi -s') 
   );
 
   await renameProfilesWithSuffix(workingDir);
+  // Materialise external R4 parent chains as local FSH so SUSHI rebuilds them on R6
+  // core; without this, children of R4 dependency profiles stay R4.
+  await resolveParentChainToFsh(workingDir).catch((error) => {
+    console.warn(`  Parent chain resolution failed: ${error.message}`);
+    console.warn('  Continuing; profiles deriving from external R4 parents may remain R4.');
+  });
   await runSushiUntilSuccess(workingDir, sushiExecutable);
-  
+
   return workingDir;
 }
 
